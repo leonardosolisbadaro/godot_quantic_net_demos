@@ -2,11 +2,11 @@
 ## @path res://main.gd
 ##
 ## @description
-## Ponto de entrada da Demo 05. Configura a topologia de rede e implementa
-## Snapshot Interpolation para renderização visual suave de entidades remotas.
+## Ponto de entrada da Demo 06. Configura a topologia de rede e implementa
+## Server Authority & Snapback. O servidor valida movimentos e pune cheats.
 ##
-## @created 2026-08-07
-## @updated 2026-08-07
+## @created 2026-08-08
+## @updated 2026-08-08
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends Node3D
@@ -47,13 +47,18 @@ func _ready() -> void:
 	_adapter.visual_state_received.connect(_on_visual_state_received)
 	_adapter.visual_entity_removed.connect(_on_visual_entity_removed)
 
+	QuanticNet.snapback_received.connect(_on_snapback)
+
 	var args = OS.get_cmdline_user_args()
 	var use_netem = args.has("--netem")
 
+	# Confiamos na engine C++ para validar a física nativamente.
+	# Definimos max_speed = 15.0 m/s para pegar o teleporte do Cliente.
+	# Definimos max_strikes alto para não sermos banidos do servidor enquanto testamos.
 	var config = {
-		"max_speed": 40.0,
+		"max_speed": 15.0,
 		"hard_cap": 50.0,
-		"max_strikes": 5,
+		"max_strikes": 9999,
 		"netem_loss": 10.0 if use_netem else 0.0,
 		"netem_latency": 150 if use_netem else 0,
 		"netem_jitter": 50 if use_netem else 0,
@@ -123,8 +128,13 @@ func _physics_process(delta: float) -> void:
 		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 			input_dir.x += 1
 
+		# Injeta o cheat se pressionar Espaço
+		var inject_cheat = (
+			Input.is_action_just_pressed("ui_select") or Input.is_key_pressed(KEY_SPACE)
+		)
+
 		# Envia o input para o Use Case de Predição Local (CSP)
-		_local_pos = _move_uc.execute(_local_pos, input_dir, 10.0, delta)
+		_local_pos = _move_uc.execute(_local_pos, input_dir, 10.0, delta, inject_cheat)
 
 		# Atualiza a malha instantaneamente, sem esperar o server (Zero Input Lag)
 		if _active_visuals.has(_local_id):
@@ -166,7 +176,6 @@ func _setup_scene() -> void:
 
 
 func _on_visual_state_received(id: int, pos: Vector3, _rot: Vector3) -> void:
-	# Ignora o próprio ID no Cliente, pois ele já se auto-desenha localmente de forma otimista
 	if not QuanticNet.is_server() and id == _local_id:
 		return
 
@@ -193,3 +202,11 @@ func _on_visual_entity_removed(id: int) -> void:
 	if _active_visuals.has(id):
 		_active_visuals[id].queue_free()
 		_active_visuals.erase(id)
+
+
+func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
+	# O servidor C++ flagrou nosso cheat de velocidade e nos enviou o pacote de correção nativo.
+	print("SNAPBACK C++ RECEBIDO! Reconciliação forçada para: ", pos, " Motivo: ", reason)
+	_local_pos = pos
+	if _active_visuals.has(_local_id):
+		_active_visuals[_local_id].position = pos

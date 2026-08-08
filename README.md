@@ -31,7 +31,11 @@ Por exemplo:
 - **01 Handshake State Machine:** Ciclo de vida e conexão básica.
 - **02 Network Metrics Clock Sync:** Extração de RTT, Jitter, e 1% Low de oscilação.
 - **03 Entity Registry Authoritative Spawning:** Sincronização Server-Client de props e avatars sem mistura de RPC.
-
+- **04 Client-Side Prediction (CSP):** Zero Input Lag. O avatar local prevê os movimentos imediatamente na tela enquanto envia comandos, alcançando a responsividade exigida em eSports.
+- **05 Snapshot Interpolation:** Técnicas de "Playout Delay" e Buffer visual. Os clientes absorvem a flutuação dos pacotes da rede (Jitter) e deslizam suavemente entre os estados do servidor a 60+ FPS (resolvendo o "stuttering").
+- **06 Server Authority Snapback:** Validação Anti-Speedhack (State-Based). O Servidor não confia no cliente. Posições corrompidas (Cheats) ou divergentes são punidas com o "Snapback" brutal do QuanticNet (Reconciliação Forçada Absoluta).
+- **07 Server Reconciliation & Client Replay:** Re-simulação Inteligente de Inputs locais após um Snapback, mitigando o caos visual de saltos desordenados em altas latências, unificando a previsão local com a verdade absoluta do C++.
+- **08 Server-Side Input Validation & Jitter Tolerance:** O estado da arte do Anti-Cheat. A validação deixa de ser passiva para se tornar um simulador determinístico *Input-Based* no backend. Uma genial **Tolerância Elástica de Jitter** e **Step Capping** blindam os cálculos contra ataques de manipulação de clock e Jitter pesado provocado pelo `NETEM`, provando a capacidade latente e extensibilidade impecável do QuanticNet.
 **O que o script faz?**
 
 1. Cria a pasta da demo base com os arquivos essenciais (`project.godot`, `main.gd`, `main.tscn`, `TODO.md`, `CHANGELOG.md`).

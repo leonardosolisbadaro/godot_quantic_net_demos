@@ -154,7 +154,7 @@ if ($runningInstances) {
     foreach ($proc in $runningInstances) { Stop-Process -Id $proc.ProcessId -Force }
 } else {
     Write-Host "Iniciando Demo (1 Server, 2 Clients)..." -ForegroundColor Cyan
-    Start-Process -FilePath $godotExe -ArgumentList "--path `"$demoPath`" -- --server" -WorkingDirectory $demoPath
+    Start-Process -FilePath $godotExe -ArgumentList "--path `"$demoPath`" --headless -- --server" -WorkingDirectory $demoPath
     
     Write-Host "Aguardando Server inicializar (Race Condition protection)..." -ForegroundColor DarkGray
     Start-Sleep -Seconds 2

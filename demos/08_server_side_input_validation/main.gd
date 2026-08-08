@@ -2,11 +2,12 @@
 ## @path res://main.gd
 ##
 ## @description
-## Ponto de entrada da Demo 05. Configura a topologia de rede e implementa
-## Snapshot Interpolation para renderização visual suave de entidades remotas.
+## Ponto de entrada da Demo 08. Configura a topologia de rede e implementa
+## Server-Side Deterministic Simulation (Input Validation). 
+## O servidor valida movimentos através das teclas (WASD) e Pune cheats com precisão absoluta.
 ##
-## @created 2026-08-07
-## @updated 2026-08-07
+## @created 2026-08-08
+## @updated 2026-08-08
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends Node3D
@@ -47,13 +48,15 @@ func _ready() -> void:
 	_adapter.visual_state_received.connect(_on_visual_state_received)
 	_adapter.visual_entity_removed.connect(_on_visual_entity_removed)
 
+	QuanticNet.snapback_received.connect(_on_snapback)
+
 	var args = OS.get_cmdline_user_args()
 	var use_netem = args.has("--netem")
 
+	# Confiamos na engine C++ para validar a física nativamente.
+	# A demo 08 substitui as regras elásticas por um validador Input-Based!
 	var config = {
-		"max_speed": 40.0,
-		"hard_cap": 50.0,
-		"max_strikes": 5,
+		"max_strikes": 9999,
 		"netem_loss": 10.0 if use_netem else 0.0,
 		"netem_latency": 150 if use_netem else 0,
 		"netem_jitter": 50 if use_netem else 0,
@@ -61,7 +64,19 @@ func _ready() -> void:
 
 	if args.has("--server"):
 		DisplayServer.window_set_title("SERVER")
+		print("SERVER INICIADO!")
+		
 		QuanticNet.host(4242, "demo-secret", "*", 32, config)
+		
+		# INJEÇÃO DA VALIDAÇÃO DE INPUT CUSTOMIZADA!
+		# Acessamos a instância latente '_host_session' do QuanticNet para sobrescrever o validador state-based padrão.
+		# Fazemos isso APÓS o host(), pois o host() inicializa a _host_session.
+		var input_validator = preload("res://src/domain/qn_input_validator.gd").new()
+		input_validator.configure(config)
+		var host_session = QuanticNet.get("_host_session")
+		if host_session:
+			host_session.set_validator(input_validator)
+			print("[SERVER] Input Validator injetado com sucesso!")
 		# O Servidor nasce autoritativo: registra a si mesmo e o cenário.
 		spawn_uc.execute(1, true, factory.create_player_profile())
 		spawn_uc.execute(1001, false, factory.create_prop_profile())
@@ -123,12 +138,20 @@ func _physics_process(delta: float) -> void:
 		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 			input_dir.x += 1
 
+		# Injeta o cheat se pressionar Espaço
+		var inject_cheat = (
+			Input.is_action_just_pressed("ui_select") or Input.is_key_pressed(KEY_SPACE)
+		)
+
 		# Envia o input para o Use Case de Predição Local (CSP)
-		_local_pos = _move_uc.execute(_local_pos, input_dir, 10.0, delta)
+		_local_pos = _move_uc.execute(_local_pos, input_dir, 10.0, delta, inject_cheat)
 
 		# Atualiza a malha instantaneamente, sem esperar o server (Zero Input Lag)
 		if _active_visuals.has(_local_id):
 			_active_visuals[_local_id].position = _local_pos
+
+
+
 
 
 func _setup_local_avatar() -> void:
@@ -166,7 +189,6 @@ func _setup_scene() -> void:
 
 
 func _on_visual_state_received(id: int, pos: Vector3, _rot: Vector3) -> void:
-	# Ignora o próprio ID no Cliente, pois ele já se auto-desenha localmente de forma otimista
 	if not QuanticNet.is_server() and id == _local_id:
 		return
 
@@ -187,9 +209,41 @@ func _on_visual_state_received(id: int, pos: Vector3, _rot: Vector3) -> void:
 		_active_visuals[id] = mesh_instance
 		# Seta a posição inicial para não vir do (0,0,0) na primeira vez
 		_active_visuals[id].position = pos
+		
+	# AVISO: NÃO aplique a posição instantaneamente aqui em cada tick (20Hz)!
+	# Caso contrário as entidades sofrerão stuttering. A interpolação suave 
+	# será conduzida pelo InterpolateRemoteEntitiesUseCase dentro do _process.
 
 
 func _on_visual_entity_removed(id: int) -> void:
 	if _active_visuals.has(id):
 		_active_visuals[id].queue_free()
 		_active_visuals.erase(id)
+
+
+func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
+	# 1. Aceitamos o vetor oficial e absoluto do servidor como a nova verdade local
+	_local_pos = pos
+
+	if replay.size() > 0:
+		print(
+			"SNAPBACK C++ RECEBIDO! Reconciliando: ",
+			pos,
+			". Re-aplicando ",
+			replay.size(),
+			" inputs pendentes...",
+		)
+		# 2. Re-aplicamos (Client Replay) todos os inputs que foram enviados APÓS o frame da correção
+		for pending in replay:
+			var dir = pending["move"]
+			var dt = pending["dt"]
+			# Executamos nossa Use Case de domínio exatamente da mesma forma,
+			# consumindo a direção original (x, y) que o servidor devolveu.
+			# E passamos false no inject_teleport para não engatilhar loop de fraude!
+			# E passamos false no submit_network para não re-enviar pacotes!
+			_local_pos = _move_uc.execute(_local_pos, Vector3(dir.x, 0, dir.y), 10.0, dt, false, false)
+	else:
+		print("SNAPBACK C++ RECEBIDO! Reconciliação forçada para: ", pos, " Motivo: ", reason)
+
+	if _active_visuals.has(_local_id):
+		_active_visuals[_local_id].position = _local_pos
