@@ -15,9 +15,11 @@ extends Node3D
 const EntityProfileFactory = preload("res://src/domain/entity_profile_factory.gd")
 const SpawnAuthoritativeEntityUseCase = preload("res://src/use_cases/spawn_authoritative_entity_use_case.gd")
 const DespawnAuthoritativeEntityUseCase = preload("res://src/use_cases/despawn_authoritative_entity_use_case.gd")
+const MoveLocalPlayerUseCase = preload("res://src/use_cases/move_local_player_use_case.gd")
 const EntityRegistryAdapter = preload("res://src/adapters/entity_registry_adapter.gd")
 
 var _adapter: EntityRegistryAdapter
+var _move_uc: MoveLocalPlayerUseCase
 var _active_visuals: Dictionary = {}
 
 var _local_id: int = 0
@@ -30,22 +32,34 @@ func _ready() -> void:
 	var factory = EntityProfileFactory.new()
 	var spawn_uc = SpawnAuthoritativeEntityUseCase.new(QuanticNet)
 	var despawn_uc = DespawnAuthoritativeEntityUseCase.new(QuanticNet)
+	_move_uc = MoveLocalPlayerUseCase.new(QuanticNet)
 	
 	_adapter = EntityRegistryAdapter.new(QuanticNet, spawn_uc, despawn_uc, factory)
 	_adapter.visual_state_received.connect(_on_visual_state_received)
 	_adapter.visual_entity_removed.connect(_on_visual_entity_removed)
 	
 	var args = OS.get_cmdline_user_args()
+	var use_netem = args.has("--netem")
+	
+	var config = {
+		"max_speed": 40.0,
+		"hard_cap": 50.0,
+		"max_strikes": 5,
+		"netem_loss": 10.0 if use_netem else 0.0,
+		"netem_latency": 150 if use_netem else 0,
+		"netem_jitter": 50 if use_netem else 0
+	}
+	
 	if args.has("--server"):
 		DisplayServer.window_set_title("SERVER")
-		QuanticNet.host(4242, "demo-secret")
+		QuanticNet.host(4242, "demo-secret", "*", 32, config)
 		# O Servidor nasce autoritativo: registra a si mesmo e o cenário.
 		spawn_uc.execute(1, true, factory.create_player_profile())
 		spawn_uc.execute(1001, false, factory.create_prop_profile())
 		spawn_uc.execute(1002, false, factory.create_prop_profile())
 	else:
-		DisplayServer.window_set_title("CLIENT")
-		QuanticNet.join("127.0.0.1", 4242, "demo-secret")
+		DisplayServer.window_set_title("CLIENT (NETEM ON)" if use_netem else "CLIENT")
+		QuanticNet.join("127.0.0.1", 4242, "demo-secret", use_netem, config)
 		
 	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
 
@@ -80,8 +94,19 @@ func _physics_process(delta: float) -> void:
 		if _local_id == 0:
 			_setup_local_avatar()
 			
-		# Envia o estado do Cliente para o Servidor (Client-Side Prediction base)
-		QuanticNet.submit_state(_local_pos, Vector3.ZERO, 0, delta)
+		# Captura input direcional (W, A, S, D)
+		var input_dir = Vector3.ZERO
+		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): input_dir.z -= 1
+		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): input_dir.z += 1
+		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): input_dir.x -= 1
+		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): input_dir.x += 1
+			
+		# Envia o input para o Use Case de Predição Local (CSP)
+		_local_pos = _move_uc.execute(_local_pos, input_dir, 10.0, delta)
+		
+		# Atualiza a malha instantaneamente, sem esperar o server (Zero Input Lag)
+		if _active_visuals.has(_local_id):
+			_active_visuals[_local_id].position = _local_pos
 
 func _process(_delta: float) -> void:
 	# O Servidor não recebe 'state_received' passivamente pela rede (pois ele é a fonte da verdade).

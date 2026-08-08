@@ -12,13 +12,25 @@ A arquitetura deste repositório foi construída para suportar dezenas de demos 
 
 ## Como criar uma nova Demo?
 
-Para evitar tarefas repetitivas, possuímos um script gerador de andaimos (*scaffolding*).
+Para evitar tarefas repetitivas, possuímos um script gerador de estrutura básica (*scaffolding*).
 
 Abra o terminal na raiz do projeto e execute:
 
 ```powershell
-.\setup_demos.ps1
+.\setup_demos.ps1 -n [nome_da_demo]
 ```
+
+Por exemplo:
+
+```powershell
+.\setup_demos.ps1 -n 04_client_side_prediction_kinematics
+```
+
+### Demos Implementadas (Até agora)
+
+- **01 Handshake State Machine:** Ciclo de vida e conexão básica.
+- **02 Network Metrics Clock Sync:** Extração de RTT, Jitter, e 1% Low de oscilação.
+- **03 Entity Registry Authoritative Spawning:** Sincronização Server-Client de props e avatars sem mistura de RPC.
 
 **O que o script faz?**
 
