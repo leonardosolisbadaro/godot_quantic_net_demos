@@ -17,6 +17,11 @@ var _btn_netem: Button
 func _ready() -> void:
 	print(">>> Demo 02 Iniciada: Network Metrics & Clock Sync <<<")
 	
+	# Limitamos o framerate para parear com o Tick Rate do servidor (60Hz)
+	# Sem isso, as 3 instâncias rodam a +1000 FPS, esgotando a CPU e causando
+	# perda de pacotes locais (Packet Loss UDP) e alta variância no Ping (Jitter).
+	Engine.max_fps = 60
+	
 	_adapter = TelemetryAdapter.new()
 	add_child(_adapter)
 	_adapter.metrics_updated.connect(_on_metrics_updated)

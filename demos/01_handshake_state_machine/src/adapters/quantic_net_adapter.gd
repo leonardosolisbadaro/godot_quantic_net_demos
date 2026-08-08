@@ -35,6 +35,11 @@ func _ready() -> void:
 	# Escuta a engine nativa C++
 	gateway.connection_state_changed.connect(_on_connection_state_changed)
 
+func host_server(port: int, secret: String) -> void:
+	var gateway = get_node_or_null("/root/QuanticNet")
+	if gateway:
+		gateway.host(port, secret)
+
 func join_server(ip: String, port: int, secret: String) -> void:
 	if _connect_use_case.execute(ip, port, secret):
 		_emit_state()

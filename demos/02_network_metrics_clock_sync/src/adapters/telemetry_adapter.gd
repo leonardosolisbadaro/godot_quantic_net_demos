@@ -40,6 +40,16 @@ func _on_qn_state_changed(st: int) -> void:
 	
 	connection_state_changed.emit(state_name, is_connected)
 
+func _physics_process(delta: float) -> void:
+	if not _qn or _qn.get_state() != QuanticNet.ConnectionState.CONNECTED:
+		return
+		
+	# A demo_main.gd nos ensina que pacotes de rede DEVEM ser enviados no
+	# _physics_process (Tick Rate fixo, ex: 60Hz), e não no _process (destravado),
+	# para evitar Spam UDP e Bufferbloat no ENet.
+	if not _qn.is_server():
+		_qn.submit_state(Vector3.ZERO, Vector3.ZERO, 0, delta)
+
 func _process(_delta: float) -> void:
 	if not _qn or _qn.get_state() != QuanticNet.ConnectionState.CONNECTED:
 		return

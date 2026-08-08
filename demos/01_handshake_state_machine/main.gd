@@ -8,6 +8,9 @@ var _lbl_status: Label
 func _ready() -> void:
 	print(">>> Demo 01 Iniciada <<<")
 	
+	# Limitamos o framerate para parear com o Tick Rate do servidor (60Hz)
+	Engine.max_fps = 60
+	
 	_adapter = QuanticNetAdapter.new()
 	add_child(_adapter)
 	_adapter.session_state_updated.connect(_on_state_updated)
@@ -17,8 +20,7 @@ func _ready() -> void:
 	var args = OS.get_cmdline_user_args()
 	if args.has("--server"):
 		DisplayServer.window_set_title("SERVER (Authority)")
-		var qn = get_node("/root/QuanticNet")
-		qn.host(4242, "secret")
+		_adapter.host_server(4242, "secret")
 	elif args.has("--client"):
 		DisplayServer.window_set_title("CLIENT")
 		# Cliente já invocado via terminal (Auto-Move logic for tests)

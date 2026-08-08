@@ -32,7 +32,8 @@ func execute() -> Dictionary:
 	if not _gateway:
 		return output
 		
-	var agg = _gateway.get_telemetry(_server_peer_id)
+	var target_id = _gateway.get_unique_id() if _gateway.has_method("get_unique_id") else 1
+	var agg = _gateway.get_telemetry(target_id)
 	if not agg:
 		return output
 		
