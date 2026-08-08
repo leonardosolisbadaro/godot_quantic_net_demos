@@ -1,10 +1,16 @@
-# setup_demos.ps1
+param (
+    [Parameter(Mandatory=$false)]
+    [string]$n = ""
+)
+
 $ErrorActionPreference = "SilentlyContinue"
+
+# Configure aqui o caminho absoluto para o executável (console) da Godot Engine
+$GodotExePath = "C:\Users\LEONARDO\Documents\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe"
 
 $RootPath = $PSScriptRoot
 $RootAddonPath = Join-Path $RootPath "addons\quantic_net\addons\quantic_net"
 $DemosPath = Join-Path $RootPath "demos"
-$DemoFooPath = Join-Path $DemosPath "demo_foo"
 
 # Helper para escrever UTF-8 sem BOM (crucial para o Godot)
 function Write-Utf8NoBom {
@@ -17,10 +23,19 @@ if (-not (Test-Path $DemosPath)) {
     New-Item -ItemType Directory -Path $DemosPath | Out-Null
 }
 
-# 2. Se não existir, cria a demo genérica (que será renomeada pelo usuário)
-if (-not (Test-Path $DemoFooPath)) {
-    Write-Host "Criando nova demo base em 'demo_foo'..." -ForegroundColor Cyan
-    New-Item -ItemType Directory -Path $DemoFooPath | Out-Null
+# 2. Se um nome foi passado via CLI, cria a demo base
+if ($n -ne "") {
+    $NewDemoPath = Join-Path $DemosPath $n
+    if (-not (Test-Path $NewDemoPath)) {
+        Write-Host "Criando nova demo base em '$n'..." -ForegroundColor Cyan
+        New-Item -ItemType Directory -Path $NewDemoPath | Out-Null
+        
+        # Scaffold Clean Architecture & TDD
+        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\domain") | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\use_cases") | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\adapters") | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\infrastructure") | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "tests") | Out-Null
 
     # --- ARQUIVO: project.godot ---
     $projectGodot = @'
@@ -38,7 +53,7 @@ QuanticNet="*res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd
 [editor_plugins]
 enabled=PackedStringArray("res://addons/quantic_net/plugin.cfg")
 '@
-    Write-Utf8NoBom (Join-Path $DemoFooPath "project.godot") $projectGodot
+    Write-Utf8NoBom (Join-Path $NewDemoPath "project.godot") $projectGodot
 
     # --- ARQUIVO: main.tscn ---
     $mainTscn = @'
@@ -49,7 +64,7 @@ enabled=PackedStringArray("res://addons/quantic_net/plugin.cfg")
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
 '@
-    Write-Utf8NoBom (Join-Path $DemoFooPath "main.tscn") $mainTscn
+    Write-Utf8NoBom (Join-Path $NewDemoPath "main.tscn") $mainTscn
 
     # --- ARQUIVO: main.gd ---
     $mainGd = @'
@@ -70,16 +85,17 @@ func _ready() -> void:
 		qn.join("127.0.0.1", 8080, "secret")
 		print("Cliente conectando...")
 '@
-    Write-Utf8NoBom (Join-Path $DemoFooPath "main.gd") $mainGd
+    Write-Utf8NoBom (Join-Path $NewDemoPath "main.gd") $mainGd
 
     # --- ARQUIVO: toggle_demo.ps1 ---
     $toggleDemo = @'
 $ErrorActionPreference = "SilentlyContinue"
-$godotExe = "C:\Users\LEONARDO\Documents\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe"
+$godotExe = "{{GODOT_EXE}}"
 $demoPath = $PSScriptRoot
 
 $demoName = Split-Path $demoPath -Leaf
-$runningInstances = Get-CimInstance Win32_Process -Filter "Name LIKE 'Godot_v4.7.1-stable_win64%'" | Where-Object { 
+$godotExeBase = [System.IO.Path]::GetFileNameWithoutExtension($godotExe)
+$runningInstances = Get-CimInstance Win32_Process -Filter "Name LIKE '$godotExeBase%'" | Where-Object { 
     $_.CommandLine -match $demoName -and 
     ($_.CommandLine -match "--client" -or $_.CommandLine -match "--server")
 }
@@ -98,7 +114,8 @@ if ($runningInstances) {
     Start-Process -FilePath $godotExe -ArgumentList "--path `"$demoPath`" -- --client" -WorkingDirectory $demoPath
 }
 '@
-    Write-Utf8NoBom (Join-Path $DemoFooPath "toggle_demo.ps1") $toggleDemo
+    $toggleDemo = $toggleDemo.Replace("{{GODOT_EXE}}", $GodotExePath)
+    Write-Utf8NoBom (Join-Path $NewDemoPath "toggle_demo.ps1") $toggleDemo
 
     # --- ARQUIVO: CHANGELOG.md ---
     $changelog = @'
@@ -109,7 +126,7 @@ Todas as mudancas notaveis para esta demo serao documentadas neste arquivo.
 ## [Unreleased]
 - Criacao base da demo.
 '@
-    Write-Utf8NoBom (Join-Path $DemoFooPath "CHANGELOG.md") $changelog
+    Write-Utf8NoBom (Join-Path $NewDemoPath "CHANGELOG.md") $changelog
 
     # --- ARQUIVO: TODO.md ---
     $todo = @'
@@ -120,9 +137,10 @@ Roadmap e tarefas especificas para esta implementacao.
 ## Fase 1
 - [ ] Tarefa inicial
 '@
-    Write-Utf8NoBom (Join-Path $DemoFooPath "TODO.md") $todo
+    Write-Utf8NoBom (Join-Path $NewDemoPath "TODO.md") $todo
 
     Write-Host "Arquivos base copiados com sucesso." -ForegroundColor Green
+    }
 }
 
 # 3. Cria as Junctions e Caches para TODAS as demos contidas em demos/
@@ -142,10 +160,23 @@ Get-ChildItem -Path $DemosPath -Directory | ForEach-Object {
     cmd /c mklink /J "$DemoPluginLink" "$RootAddonPath" | Out-Null
     
     # 4. Força o Godot a gerar o cache nativo e registrar a GDExtension
-    $godotExe = "C:\Users\LEONARDO\Documents\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe"
     $godotCache = Join-Path $DemoPath ".godot\extension_list.cfg"
     if (-not (Test-Path $godotCache)) {
         Write-Host "Construindo Cache/GDExtension para a demo: $($_.Name)..." -ForegroundColor Magenta
-        Start-Process -FilePath $godotExe -ArgumentList "--path `"$DemoPath`" --headless --editor --quit" -Wait -NoNewWindow
+        
+        # Redireciona stdout e stderr para arquivos separados para evitar lock de IO do PowerShell
+        $logOut = Join-Path $DemoPath "godot_cache_build.log"
+        $logErr = Join-Path $DemoPath "godot_cache_err.log"
+        Start-Process -FilePath $GodotExePath -ArgumentList "--path `"$DemoPath`" --headless --editor --quit" -Wait -NoNewWindow -RedirectStandardOutput $logOut -RedirectStandardError $logErr
+        
+        # Verifica se obteve sucesso na geracao do cache
+        if (Test-Path $godotCache) {
+            Write-Host "Cache gerado com sucesso para a demo: $($_.Name)" -ForegroundColor Green
+            Remove-Item $logOut -Force -ErrorAction SilentlyContinue
+            Remove-Item $logErr -Force -ErrorAction SilentlyContinue
+        } else {
+            Write-Host "FALHA ao gerar o cache para a demo: $($_.Name)." -ForegroundColor Red
+            Write-Host "Consulte os logs: $logOut e $logErr" -ForegroundColor Red
+        }
     }
 }

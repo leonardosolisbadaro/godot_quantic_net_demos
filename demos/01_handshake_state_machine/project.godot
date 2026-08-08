@@ -1,4 +1,4 @@
-﻿; Engine configuration file.
+; Engine configuration file.
 config_version=5
 
 [application]
@@ -10,4 +10,4 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 QuanticNet="*res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd"
 
 [editor_plugins]
-enabled=PackedStringArray("res://addons/quantic_net/plugin.cfg")
+enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/quantic_net/plugin.cfg")
