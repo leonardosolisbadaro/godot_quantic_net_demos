@@ -98,7 +98,7 @@ enabled=PackedStringArray("res://addons/quantic_net/plugin.cfg")
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
 
-[node name="Main" type="Node"]
+[node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 '@
             Write-Utf8NoBom (Join-Path $NewDemoPath "main.tscn") $mainTscn
@@ -160,7 +160,7 @@ if ($runningInstances) {
     Start-Sleep -Seconds 2
     
     Start-Process -FilePath $godotExe -ArgumentList "--path `"$demoPath`" -- --client" -WorkingDirectory $demoPath
-    Start-Process -FilePath $godotExe -ArgumentList "--path `"$demoPath`" -- --client" -WorkingDirectory $demoPath
+    Start-Process -FilePath $godotExe -ArgumentList "--path `"$demoPath`" -- --client --netem" -WorkingDirectory $demoPath
 }
 '@
             $toggleDemo = $toggleDemo.Replace("{{GODOT_EXE}}", $GodotExePath)
