@@ -1,6 +1,8 @@
 param (
     [Parameter(Mandatory=$false)]
-    [string]$n = ""
+    [string]$n = "",
+    [Parameter(Mandatory=$false)]
+    [string]$from = ""
 )
 
 $ErrorActionPreference = "SilentlyContinue"
@@ -27,23 +29,58 @@ if (-not (Test-Path $DemosPath)) {
 if ($n -ne "") {
     $NewDemoPath = Join-Path $DemosPath $n
     if (-not (Test-Path $NewDemoPath)) {
-        Write-Host "Criando nova demo base em '$n'..." -ForegroundColor Cyan
-        New-Item -ItemType Directory -Path $NewDemoPath | Out-Null
-        
-        # Scaffold Clean Architecture & TDD
-        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\domain") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\use_cases") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\adapters") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\infrastructure") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "tests") | Out-Null
+        if ($from -ne "") {
+            $SourceDemoPath = Join-Path $DemosPath $from
+            if (Test-Path $SourceDemoPath) {
+                Write-Host "Copiando base da demo '$from' para '$n'..." -ForegroundColor Cyan
+                Copy-Item -Path $SourceDemoPath -Destination $NewDemoPath -Recurse
+                
+                # Limpa arquivos específicos
+                $NewTestsPath = Join-Path $NewDemoPath "tests"
+                if (Test-Path $NewTestsPath) {
+                    Remove-Item -Path "$NewTestsPath\*" -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                
+                $NewGodotCache = Join-Path $NewDemoPath ".godot"
+                if (Test-Path $NewGodotCache) {
+                    Remove-Item -Path $NewGodotCache -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                
+                # Deslinka o QuanticNet copiado (será recriado no passo 3)
+                $CopiedLink = Join-Path $NewDemoPath "addons\quantic_net"
+                if (Test-Path $CopiedLink) {
+                    cmd /c rmdir "$CopiedLink" | Out-Null
+                }
+                
+                # Atualiza o nome no project.godot
+                $CopiedProject = Join-Path $NewDemoPath "project.godot"
+                if (Test-Path $CopiedProject) {
+                    $projContent = Get-Content $CopiedProject -Raw
+                    $projContent = $projContent -replace 'config/name=".*"', "config/name=`"$n`""
+                    Write-Utf8NoBom $CopiedProject $projContent
+                }
+            } else {
+                Write-Host "Demo origem '$from' nao encontrada." -ForegroundColor Red
+                return
+            }
+        } else {
+            Write-Host "Criando nova demo base em '$n' do zero..." -ForegroundColor Cyan
+            New-Item -ItemType Directory -Path $NewDemoPath | Out-Null
+            
+            # Scaffold Clean Architecture & TDD
+            New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\domain") | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\use_cases") | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\adapters") | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "src\infrastructure") | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $NewDemoPath "tests") | Out-Null
 
-    # --- ARQUIVO: project.godot ---
-    $projectGodot = @'
+            # --- ARQUIVO: project.godot ---
+            $projectGodot = @"
 ; Engine configuration file.
 config_version=5
 
 [application]
-config/name="Nova Demo"
+config/name="$n"
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
@@ -52,11 +89,11 @@ QuanticNet="*res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd
 
 [editor_plugins]
 enabled=PackedStringArray("res://addons/quantic_net/plugin.cfg")
-'@
-    Write-Utf8NoBom (Join-Path $NewDemoPath "project.godot") $projectGodot
+"@
+            Write-Utf8NoBom (Join-Path $NewDemoPath "project.godot") $projectGodot
 
-    # --- ARQUIVO: main.tscn ---
-    $mainTscn = @'
+            # --- ARQUIVO: main.tscn ---
+            $mainTscn = @'
 [gd_scene load_steps=2 format=3 uid="uid://b410e8s210e31"]
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
@@ -64,10 +101,22 @@ enabled=PackedStringArray("res://addons/quantic_net/plugin.cfg")
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
 '@
-    Write-Utf8NoBom (Join-Path $NewDemoPath "main.tscn") $mainTscn
+            Write-Utf8NoBom (Join-Path $NewDemoPath "main.tscn") $mainTscn
 
-    # --- ARQUIVO: main.gd ---
-    $mainGd = @'
+            # --- ARQUIVO: main.gd ---
+            $currentDate = Get-Date -Format "yyyy-MM-dd"
+            $mainGd = @"
+## @file main.gd
+## @path res://main.gd
+##
+## @description
+## Ponto de entrada da Demo $n. "...descricao da demo...".
+##
+## @created $currentDate
+## @updated $currentDate
+##
+## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
+
 extends Node
 
 func _ready() -> void:
@@ -77,18 +126,18 @@ func _ready() -> void:
 		print("ERRO: Autoload QuanticNet nao encontrado.")
 		return
 		
-	var args = OS.get_cmdline_args()
+	var args = OS.get_cmdline_user_args()
 	if "--server" in args:
 		qn.host(8080, "secret")
 		print("Servidor escutando...")
-	elif "--client" in args:
+	else:
 		qn.join("127.0.0.1", 8080, "secret")
 		print("Cliente conectando...")
-'@
-    Write-Utf8NoBom (Join-Path $NewDemoPath "main.gd") $mainGd
+"@
+            Write-Utf8NoBom (Join-Path $NewDemoPath "main.gd") $mainGd
 
-    # --- ARQUIVO: toggle_demo.ps1 ---
-    $toggleDemo = @'
+            # --- ARQUIVO: toggle_demo.ps1 ---
+            $toggleDemo = @'
 $ErrorActionPreference = "SilentlyContinue"
 $godotExe = "{{GODOT_EXE}}"
 $demoPath = $PSScriptRoot
@@ -114,32 +163,35 @@ if ($runningInstances) {
     Start-Process -FilePath $godotExe -ArgumentList "--path `"$demoPath`" -- --client" -WorkingDirectory $demoPath
 }
 '@
-    $toggleDemo = $toggleDemo.Replace("{{GODOT_EXE}}", $GodotExePath)
-    Write-Utf8NoBom (Join-Path $NewDemoPath "toggle_demo.ps1") $toggleDemo
+            $toggleDemo = $toggleDemo.Replace("{{GODOT_EXE}}", $GodotExePath)
+            Write-Utf8NoBom (Join-Path $NewDemoPath "toggle_demo.ps1") $toggleDemo
+        }
 
-    # --- ARQUIVO: CHANGELOG.md ---
-    $changelog = @'
+        # ARQUIVOS COMUNS RECRIADOS PARA AMBAS ABORDAGENS (Clean state)
+        
+        # --- ARQUIVO: CHANGELOG.md ---
+        $changelog = @"
 # Changelog
 
 Todas as mudancas notaveis para esta demo serao documentadas neste arquivo.
 
 ## [Unreleased]
-- Criacao base da demo.
-'@
-    Write-Utf8NoBom (Join-Path $NewDemoPath "CHANGELOG.md") $changelog
+- Criacao da demo $n.
+"@
+        Write-Utf8NoBom (Join-Path $NewDemoPath "CHANGELOG.md") $changelog
 
-    # --- ARQUIVO: TODO.md ---
-    $todo = @'
+        # --- ARQUIVO: TODO.md ---
+        $todo = @"
 # TODO
 
 Roadmap e tarefas especificas para esta implementacao.
 
 ## Fase 1
 - [ ] Tarefa inicial
-'@
-    Write-Utf8NoBom (Join-Path $NewDemoPath "TODO.md") $todo
+"@
+        Write-Utf8NoBom (Join-Path $NewDemoPath "TODO.md") $todo
 
-    Write-Host "Arquivos base copiados com sucesso." -ForegroundColor Green
+        Write-Host "Arquivos base preparados com sucesso." -ForegroundColor Green
     }
 }
 

@@ -8,14 +8,15 @@
 ## @updated 2026-08-07
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
-
 class_name HandleConnectionStateChangeUseCase
 extends RefCounted
 
 var _session: NetworkSession
 
+
 func _init(session: NetworkSession) -> void:
 	_session = session
+
 
 ## Executa a transição. Espera o Enum inteiro vindo do QuanticNet.
 func execute(quantic_net_state: int) -> void:

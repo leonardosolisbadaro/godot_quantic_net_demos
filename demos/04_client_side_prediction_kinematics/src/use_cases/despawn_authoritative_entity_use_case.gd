@@ -9,14 +9,15 @@
 ## @updated 2026-08-07
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
-
 class_name DespawnAuthoritativeEntityUseCase
 extends RefCounted
 
 var _gateway: Object
 
+
 func _init(gateway: Object) -> void:
 	_gateway = gateway
+
 
 func execute(entity_id: int) -> void:
 	_gateway.unregister_entity(entity_id)
