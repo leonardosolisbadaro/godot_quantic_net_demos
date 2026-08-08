@@ -26,6 +26,12 @@ Por exemplo:
 .\setup_demos.ps1 -n 04_client_side_prediction_kinematics
 ```
 
+**O que o script faz?**
+
+1. Cria a pasta da demo base com os arquivos essenciais (`project.godot`, `main.gd`, `main.tscn`, `TODO.md`, `CHANGELOG.md`).
+2. Gera automaticamente uma **Directory Junction** (`mklink /J`) dentro da demo apontando para o submódulo da raiz, garantindo que todas as demos consumam o mesmo plugin fisicamente sem duplicar arquivos na memória.
+3. Roda a Godot silenciosamente em *headless mode* (`--editor`) para compilar o cache (`.godot/`) e registrar a *GDExtension* C++ imediatamente.
+
 ### Demos Implementadas (Até agora)
 
 - **01 Handshake State Machine:** Ciclo de vida e conexão básica.
@@ -36,11 +42,6 @@ Por exemplo:
 - **06 Server Authority Snapback:** Validação Anti-Speedhack (State-Based). O Servidor não confia no cliente. Posições corrompidas (Cheats) ou divergentes são punidas com o "Snapback" brutal do QuanticNet (Reconciliação Forçada Absoluta).
 - **07 Server Reconciliation & Client Replay:** Re-simulação Inteligente de Inputs locais após um Snapback, mitigando o caos visual de saltos desordenados em altas latências, unificando a previsão local com a verdade absoluta do C++.
 - **08 Server-Side Input Validation & Jitter Tolerance:** O estado da arte do Anti-Cheat. A validação deixa de ser passiva para se tornar um simulador determinístico *Input-Based* no backend. Uma genial **Tolerância Elástica de Jitter** e **Step Capping** blindam os cálculos contra ataques de manipulação de clock e Jitter pesado provocado pelo `NETEM`, provando a capacidade latente e extensibilidade impecável do QuanticNet.
-**O que o script faz?**
-
-1. Cria a pasta da demo base com os arquivos essenciais (`project.godot`, `main.gd`, `main.tscn`, `TODO.md`, `CHANGELOG.md`).
-2. Gera automaticamente uma **Directory Junction** (`mklink /J`) dentro da demo apontando para o submódulo da raiz, garantindo que todas as demos consumam o mesmo plugin fisicamente sem duplicar arquivos na memória.
-3. Roda a Godot silenciosamente em *headless mode* (`--editor`) para compilar o cache (`.godot/`) e registrar a *GDExtension* C++ imediatamente.
 
 > *Dica: Após rodar o script, você pode renomear livremente a pasta recém-criada para o nome que desejar.*
 
