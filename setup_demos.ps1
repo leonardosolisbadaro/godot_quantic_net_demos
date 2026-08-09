@@ -206,7 +206,7 @@ Get-ChildItem -Path $DemosPath -Directory | ForEach-Object {
     }
 
     if (Test-Path $DemoPluginLink) {
-        cmd /c rmdir "$DemoPluginLink" | Out-Null
+        Remove-Item -Path $DemoPluginLink -Recurse -Force -ErrorAction SilentlyContinue
     }
     Write-Host "Linkando QuanticNet para a demo: $($_.Name)" -ForegroundColor Green
     cmd /c mklink /J "$DemoPluginLink" "$RootAddonPath" | Out-Null

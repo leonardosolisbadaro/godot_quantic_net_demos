@@ -1,4 +1,4 @@
-# Changelog - Demo 08
+# Changelog
 
 Todas as mudanças e conquistas arquiteturais desta demo estão documentadas aqui.
 

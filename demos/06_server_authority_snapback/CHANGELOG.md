@@ -1,6 +1,11 @@
 # Changelog
 
-Todas as mudancas notaveis para esta demo serao documentadas neste arquivo.
+Todas as mudanças e conquistas arquiteturais desta demo estão documentadas aqui.
 
-## [Unreleased]
-- Criacao da demo 06_server_authority_snapback.
+## [1.0.0] - 2026-08-08
+
+### Added
+
+- Implementação da autoridade do servidor baseada em limites cinéticos.
+- Sistema anti-cheat de tolerância zero disparando correções forçadas de Snapback.
+- Capacidade do cliente de absorver o vetor de correção da rede, cancelando a predição local e aceitando a verdade do host.

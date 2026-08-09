@@ -3,7 +3,7 @@
 ##
 ## @description
 ## Ponto de entrada da Demo 08. Configura a topologia de rede e implementa
-## Server-Side Deterministic Simulation (Input Validation). 
+## Server-Side Deterministic Simulation (Input Validation).
 ## O servidor valida movimentos através das teclas (WASD) e Pune cheats com precisão absoluta.
 ##
 ## @created 2026-08-08
@@ -49,6 +49,19 @@ func _ready() -> void:
 	_adapter.visual_entity_removed.connect(_on_visual_entity_removed)
 
 	QuanticNet.snapback_received.connect(_on_snapback)
+	QuanticNet.peer_joined.connect(
+		func(id: int):
+			if QuanticNet.is_server():
+				var ts = Time.get_time_string_from_system()
+				# O IP bruto do socket fica isolado no C++ (ENet), exibimos N/A ou mascarado no domínio GDScript
+				print("[%s] [SERVER] [+] Conexão Autenticada | Peer ID Assigned: %d | IP: [Encapsulado]" % [ts, id])
+	)
+	QuanticNet.peer_left.connect(
+		func(id: int):
+			if QuanticNet.is_server():
+				var ts = Time.get_time_string_from_system()
+				print("[%s] [SERVER] [-] Conexão Encerrada | Peer ID Dropped: %d" % [ts, id])
+	)
 
 	var args = OS.get_cmdline_user_args()
 	var use_netem = args.has("--netem")
@@ -56,6 +69,7 @@ func _ready() -> void:
 	# Confiamos na engine C++ para validar a física nativamente.
 	# A demo 08 substitui as regras elásticas por um validador Input-Based!
 	var config = {
+		"network_mode": 0, # 0 = QuanticNet.MODE_STATE_BASED
 		"max_strikes": 9999,
 		"netem_loss": 10.0 if use_netem else 0.0,
 		"netem_latency": 150 if use_netem else 0,
@@ -65,18 +79,16 @@ func _ready() -> void:
 	if args.has("--server"):
 		DisplayServer.window_set_title("SERVER")
 		print("SERVER INICIADO!")
-		
+
 		QuanticNet.host(4242, "demo-secret", "*", 32, config)
-		
+
 		# INJEÇÃO DA VALIDAÇÃO DE INPUT CUSTOMIZADA!
-		# Acessamos a instância latente '_host_session' do QuanticNet para sobrescrever o validador state-based padrão.
+		# Acessamos a API pública do QuanticNet para sobrescrever o validador state-based padrão.
 		# Fazemos isso APÓS o host(), pois o host() inicializa a _host_session.
 		var input_validator = preload("res://src/domain/qn_input_validator.gd").new()
 		input_validator.configure(config)
-		var host_session = QuanticNet.get("_host_session")
-		if host_session:
-			host_session.set_validator(input_validator)
-			print("[SERVER] Input Validator injetado com sucesso!")
+		QuanticNet.set_server_validator(input_validator)
+		print("[SERVER] Input Validator injetado com sucesso!")
 		# O Servidor nasce autoritativo: registra a si mesmo e o cenário.
 		spawn_uc.execute(1, true, factory.create_player_profile())
 		spawn_uc.execute(1001, false, factory.create_prop_profile())
@@ -151,9 +163,6 @@ func _physics_process(delta: float) -> void:
 			_active_visuals[_local_id].position = _local_pos
 
 
-
-
-
 func _setup_local_avatar() -> void:
 	_local_id = QuanticNet.get_unique_id()
 	_local_pos = Vector3(_local_id * 2.0, 1.0, 0) # Posição dummy para a demo
@@ -209,9 +218,9 @@ func _on_visual_state_received(id: int, pos: Vector3, _rot: Vector3) -> void:
 		_active_visuals[id] = mesh_instance
 		# Seta a posição inicial para não vir do (0,0,0) na primeira vez
 		_active_visuals[id].position = pos
-		
+
 	# AVISO: NÃO aplique a posição instantaneamente aqui em cada tick (20Hz)!
-	# Caso contrário as entidades sofrerão stuttering. A interpolação suave 
+	# Caso contrário as entidades sofrerão stuttering. A interpolação suave
 	# será conduzida pelo InterpolateRemoteEntitiesUseCase dentro do _process.
 
 
@@ -241,7 +250,14 @@ func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Arr
 			# consumindo a direção original (x, y) que o servidor devolveu.
 			# E passamos false no inject_teleport para não engatilhar loop de fraude!
 			# E passamos false no submit_network para não re-enviar pacotes!
-			_local_pos = _move_uc.execute(_local_pos, Vector3(dir.x, 0, dir.y), 10.0, dt, false, false)
+			_local_pos = _move_uc.execute(
+				_local_pos,
+				Vector3(dir.x, 0, dir.y),
+				10.0,
+				dt,
+				false,
+				false,
+			)
 	else:
 		print("SNAPBACK C++ RECEBIDO! Reconciliação forçada para: ", pos, " Motivo: ", reason)
 
