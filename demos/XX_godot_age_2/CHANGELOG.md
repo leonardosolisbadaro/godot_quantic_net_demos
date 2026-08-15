@@ -6,6 +6,9 @@ Todas as mudanças notáveis para esta demo serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **Fase 1, Etapa 2 Concluída:** Implementação do script orquestrador de build PowerShell [`build_maps.ps1`](file:///c:/Users/LEONARDO/Documents/godot_quantic_net_demos/demos/XX_godot_age_2/build_maps.ps1).
+    - Suporte a compilação por chunk individual (`-map "16_24"`), listas em lote (`-maps "16_25, 17_24, 17_25"`) e varredura total (`-all`).
+    - Validação e compilação em lote do cluster 2x2 de chunks adjacentes (`16_24`, `16_25`, `17_24`, `17_25`) com 100% de sucesso.
 - **Fase 1, Etapa 1 Concluída:** Implementação do compilador CLI [`tools/l2_build_chunk.py`](file:///c:/Users/LEONARDO/Documents/godot_quantic_net_demos/demos/XX_godot_age_2/tools/l2_build_chunk.py).
     - Auto-descoberta de caminhos da pasta do Lineage II (`maps/`, `textures/`, `systextures/`, `staticmeshes/`).
     - Painel de logs no terminal com relatório de dependências, dados de terreno e resumo de arquivos.

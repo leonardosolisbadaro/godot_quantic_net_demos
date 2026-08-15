@@ -22,7 +22,8 @@ Roadmap e tarefas específicas para a infraestrutura e implementação desta dem
 
 ### Etapa 2: Orquestrador de Build PowerShell (`build_maps.ps1`)
 
-- [ ] Criar script PowerShell para automatizar a compilação de chunks individuais ou em lote diretamente da pasta do Lineage II para a pasta de assets da demo.
+- [x] Criar script PowerShell para automatizar a compilação de chunks individuais ou em lote diretamente da pasta do Lineage II para a pasta de assets da demo.
+- [x] Validar compilação em lote do cluster 2x2 de chunks adjacentes (`16_25`, `17_24`, `17_25`).
 
 ### Etapa 3: Shader e Terreno no Cliente Godot 4.7
 
