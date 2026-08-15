@@ -1,0 +1,6 @@
+# Dependências para o Compilador de Chunks do Lineage II (l2_build_chunk.py)
+# Instalação: pip install -r requirements.txt
+
+numpy>=1.24.0
+Pillow>=10.0.0
+pycryptodome>=3.18.0

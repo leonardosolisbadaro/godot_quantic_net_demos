@@ -5,7 +5,6 @@ Roadmap e tarefas específicas para a infraestrutura e implementação desta dem
 ## Fase 1: Pipeline de Build e Conversão (".unr to Godotage II")
 
 ### Etapa 1: Compilador de Chunks CLI (`tools/l2_build_chunk.py`)
-
 - [x] Implementar auto-descoberta inteligente da raiz do Lineage II (`--l2-root` com fallback automático pelo caminho do `.unr`).
 - [x] Implementar painel de logs estruturados e legíveis no terminal (cabeçalho UE2, pacotes dependentes encontrados vs ausentes, tabela de camadas, dimensões e altitudes em metros).
 - [x] Implementar gerador de artefatos do Servidor:
@@ -21,15 +20,13 @@ Roadmap e tarefas específicas para a infraestrutura e implementação desta dem
 - [x] Testar e validar a compilação do chunk real `16_24.unr` gerando a estrutura de pastas completa.
 
 ### Etapa 2: Orquestrador de Build PowerShell (`build_maps.ps1`)
-
 - [x] Criar script PowerShell para automatizar a compilação de chunks individuais ou em lote diretamente da pasta do Lineage II para a pasta de assets da demo.
 - [x] Validar compilação em lote do cluster 2x2 de chunks adjacentes (`16_25`, `17_24`, `17_25`).
 
 ### Etapa 3: Shader e Terreno no Cliente Godot 4.7
-
-- [ ] Criar Shader multi-textura no Godot 4.7 consumindo os Splatmaps RGBA e o Lightmap.
-- [ ] Configurar streaming e colisão local com `HeightMapShape3D`.
+- [x] Criar Shader multi-textura no Godot 4.7 (`src/infrastructure/l2_terrain.gdshader`) consumindo os Splatmaps RGBA e o Lightmap.
+- [x] Configurar streaming e colisão local com `HeightMapShape3D` (`ChunkManager`, `L2TerrainChunkNode`, `BuildChunkCollisionUseCase`).
+- [x] Validar carregamento contínuo em memória e renderização limpa do cluster 2x2.
 
 ### Etapa 4: Validação de Altura e Física no Servidor QuanticNet
-
 - [ ] Leitura em memória de `heightfield.bin` no servidor para validação autoritativa de solo e prevenção de cheats de voo/teleporte.
