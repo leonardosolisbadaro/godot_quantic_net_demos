@@ -81,9 +81,10 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 				if s_tex:
 					mat.set_shader_parameter("splatmap_%d" % i, s_tex)
 
-		# Configura Texturas das Camadas
+		# Configura Texturas das Camadas e ativa flags
 		var layers = recipe.get("layers", [])
 		var has_base_tex = false
+		var extra_layers_count = 0
 
 		for l in layers:
 			var idx = int(l.get("layer_index", 0))
@@ -101,6 +102,15 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 					else:
 						mat.set_shader_parameter("tex_layer_%d" % idx, t_tex)
 						mat.set_shader_parameter("uv_scale_%d" % idx, Vector2(u_sc, v_sc))
+						mat.set_shader_parameter("has_layer_%d" % idx, true)
+						extra_layers_count += 1
+
+		# Se for um chunk sem camadas extras (ex: mar/oceano 17_24), harmoniza a textura base com o solo de Aden
+		if extra_layers_count == 0:
+			var common_tex = adapter.load_texture_file("16_24", "textures/layer_1_tex_SL_S6.png")
+			if common_tex:
+				mat.set_shader_parameter("tex_base", common_tex)
+				has_base_tex = true
 
 		# Se não houver textura base explícita, injeta uma textura sólida padrão (Grama Aden)
 		if not has_base_tex:

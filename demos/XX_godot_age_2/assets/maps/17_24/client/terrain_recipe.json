@@ -1,7 +1,9 @@
 {
     "chunk_name": "17_24",
     "lightmap": null,
-    "splatmaps": [],
+    "splatmaps": [
+        "splatmap_0.png"
+    ],
     "layers": [
         {
             "layer_index": 0,

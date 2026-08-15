@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 # Força UTF-8 no stdout/stderr no Windows
 if sys.platform == "win32":
@@ -509,36 +509,63 @@ class UnrealPackageReader:
         if not matched:
             return None
 
+        # Lê propriedades para descobrir formato exato e dimensões declaradas
+        prop_start = self.find_properties_start(matched["offset"], matched["size"])
+        props = self.read_properties(prop_start, matched["size"] - (prop_start - matched["offset"]))
+
         # Segue a referência do Shader/Material se aplicável
         if matched["class_name"] in ("Shader", "FinalBlend", "Combiner", "Material"):
-            prop_start = self.find_properties_start(matched["offset"], matched["size"])
-            sh_props = self.read_properties(prop_start, matched["size"] - (prop_start - matched["offset"]))
-            diff_ref = sh_props.get("Diffuse") or sh_props.get("Material") or sh_props.get("Material1")
+            diff_ref = props.get("Diffuse") or props.get("Material") or props.get("Material1")
             if isinstance(diff_ref, dict) and diff_ref.get("_is_array"):
                 diff_ref = diff_ref.get(0)
             if isinstance(diff_ref, dict) and "object_name" in diff_ref:
                 return self.extract_image_by_export_name(diff_ref["object_name"])
 
-        # Decodifica Mipmap
+        format_val = props.get("Format")
+        u_size = props.get("USize", 0)
+        v_size = props.get("VSize", 0)
+
         exp_data = self.data[matched["offset"] : matched["offset"] + matched["size"]]
+
+        target_resolutions = []
+        if isinstance(u_size, int) and isinstance(v_size, int) and u_size > 0 and v_size > 0:
+            target_resolutions.append((u_size, v_size))
         for res in [2048, 1024, 512, 256, 128, 64]:
-            dxt1_sz = (res * res) // 2
-            dxt5_sz = res * res
-            footer_pattern = struct.pack("<II", res, res)
+            if (res, res) not in target_resolutions:
+                target_resolutions.append((res, res))
+
+        for (rw, rh) in target_resolutions:
+            footer_pattern = struct.pack("<II", rw, rh)
             pos = exp_data.rfind(footer_pattern)
             if pos != -1:
-                if pos >= dxt1_sz:
-                    img = decode_dxt1_to_image(exp_data[pos - dxt1_sz : pos], res, res)
-                    if img:
-                        return img
-                if pos >= dxt5_sz:
-                    img = decode_dxt5_to_image(exp_data[pos - dxt5_sz : pos], res, res)
-                    if img:
-                        return img
-                if pos >= dxt5_sz:
-                    g8_raw = exp_data[pos - dxt5_sz : pos]
-                    arr = np.frombuffer(g8_raw, dtype=np.uint8).reshape((res, res))
-                    return Image.fromarray(arr, mode='L')
+                # DXT1 (Format 3)
+                if format_val == 3:
+                    dxt1_sz = (rw * rh) // 2
+                    if pos >= dxt1_sz:
+                        img = decode_dxt1_to_image(exp_data[pos - dxt1_sz : pos], rw, rh)
+                        if img:
+                            return img
+                # DXT3 / DXT5 (Format 5 ou 6)
+                elif format_val in (5, 6):
+                    dxt5_sz = rw * rh
+                    if pos >= dxt5_sz:
+                        img = decode_dxt5_to_image(exp_data[pos - dxt5_sz : pos], rw, rh)
+                        if img:
+                            return img
+                # G8 / Grayscale (Format 7)
+                elif format_val == 7:
+                    g8_sz = rw * rh
+                    if pos >= g8_sz:
+                        g8_raw = exp_data[pos - g8_sz : pos]
+                        arr = np.frombuffer(g8_raw, dtype=np.uint8).reshape((rh, rw))
+                        return Image.fromarray(arr, mode='L')
+                else:
+                    # Fallback
+                    dxt1_sz = (rw * rh) // 2
+                    if pos >= dxt1_sz:
+                        img = decode_dxt1_to_image(exp_data[pos - dxt1_sz : pos], rw, rh)
+                        if img:
+                            return img
         return None
 
 
@@ -1012,33 +1039,44 @@ class L2ChunkCompiler:
         # 5. Empacotamento de Splatmaps RGBA (4 canais por textura)
         splatmap_files = []
         if pack_splatmaps:
-            # Apenas camadas acima de 0 (que se sobrepõem à base) entram nos splatmaps
             active_masks = [(idx, img) for (idx, img) in layer_masks if idx > 0 and img is not None]
             splat_idx = 0
             channels = ["R", "G", "B", "A"]
 
-            for i in range(0, len(active_masks), 4):
-                batch = active_masks[i : i + 4]
-                splat_w = batch[0][1].size[0] if batch else 256
-                splat_h = batch[0][1].size[1] if batch else 256
-                rgba_arr = np.zeros((splat_h, splat_w, 4), dtype=np.uint8)
-
-                for ch_idx, (layer_orig_idx, m_img) in enumerate(batch):
-                    m_resized = m_img.resize((splat_w, splat_h))
-                    rgba_arr[:, :, ch_idx] = np.array(m_resized)
-
-                    # Atualiza a receita
-                    for r_l in recipe_layers:
-                        if r_l["layer_index"] == layer_orig_idx:
-                            r_l["splatmap_index"] = splat_idx
-                            r_l["splatmap_channel"] = channels[ch_idx]
-
-                splat_filename = f"splatmap_{splat_idx}.png"
+            if not active_masks:
+                # Chunk sem camadas extras (ex: oceano puro 17_24): cria splatmap zerado
+                empty_splat = np.zeros((256, 256, 4), dtype=np.uint8)
+                splat_filename = "splatmap_0.png"
                 splat_path = self.client_dir / splat_filename
-                Image.fromarray(rgba_arr, mode="RGBA").save(splat_path, format="PNG")
+                Image.fromarray(empty_splat, mode="RGBA").save(splat_path, format="PNG")
                 splatmap_files.append(splat_filename)
                 generated.append(splat_path)
-                splat_idx += 1
+            else:
+                for i in range(0, len(active_masks), 4):
+                    batch = active_masks[i : i + 4]
+                    # Garante resolução mínima de 1024x1024 para interpolação suave
+                    splat_w = max(1024, max(m.size[0] for _, m in batch))
+                    splat_h = max(1024, max(m.size[1] for _, m in batch))
+                    rgba_arr = np.zeros((splat_h, splat_w, 4), dtype=np.uint8)
+
+                    for ch_idx, (layer_orig_idx, m_img) in enumerate(batch):
+                        # Interpolação bicúbica suave + filtro leve para eliminar serrilhado
+                        m_resized = m_img.resize((splat_w, splat_h), resample=Image.Resampling.BICUBIC)
+                        m_resized = m_resized.filter(ImageFilter.GaussianBlur(radius=0.75))
+                        rgba_arr[:, :, ch_idx] = np.array(m_resized)
+
+                        # Atualiza a receita
+                        for r_l in recipe_layers:
+                            if r_l["layer_index"] == layer_orig_idx:
+                                r_l["splatmap_index"] = splat_idx
+                                r_l["splatmap_channel"] = channels[ch_idx]
+
+                    splat_filename = f"splatmap_{splat_idx}.png"
+                    splat_path = self.client_dir / splat_filename
+                    Image.fromarray(rgba_arr, mode="RGBA").save(splat_path, format="PNG")
+                    splatmap_files.append(splat_filename)
+                    generated.append(splat_path)
+                    splat_idx += 1
 
         # 6. terrain_recipe.json
         recipe = {
