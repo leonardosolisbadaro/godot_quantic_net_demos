@@ -66,6 +66,11 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 			var lm_tex = adapter.load_texture_file(chunk_name, lm_file)
 			if lm_tex:
 				mat.set_shader_parameter("lightmap_tex", lm_tex)
+				mat.set_shader_parameter("has_lightmap", true)
+			else:
+				mat.set_shader_parameter("has_lightmap", false)
+		else:
+			mat.set_shader_parameter("has_lightmap", false)
 
 		# Configura Splatmaps
 		var splatmaps = recipe.get("splatmaps", [])
@@ -78,6 +83,8 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 
 		# Configura Texturas das Camadas
 		var layers = recipe.get("layers", [])
+		var has_base_tex = false
+
 		for l in layers:
 			var idx = int(l.get("layer_index", 0))
 			var tex_file = l.get("texture_file")
@@ -90,9 +97,17 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 					if idx == 0:
 						mat.set_shader_parameter("tex_base", t_tex)
 						mat.set_shader_parameter("uv_scale_base", Vector2(u_sc, v_sc))
+						has_base_tex = true
 					else:
 						mat.set_shader_parameter("tex_layer_%d" % idx, t_tex)
 						mat.set_shader_parameter("uv_scale_%d" % idx, Vector2(u_sc, v_sc))
+
+		# Se não houver textura base explícita, injeta uma textura sólida padrão (Grama Aden)
+		if not has_base_tex:
+			var default_img = Image.create(16, 16, false, Image.FORMAT_RGBA8)
+			default_img.fill(Color(0.25, 0.38, 0.20, 1.0))
+			var default_tex = ImageTexture.create_from_image(default_img)
+			mat.set_shader_parameter("tex_base", default_tex)
 
 		visual_mesh.material_override = mat
 

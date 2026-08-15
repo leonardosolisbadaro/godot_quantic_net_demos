@@ -1,17 +1,15 @@
 {
     "chunk_name": "17_24",
     "lightmap": null,
-    "splatmaps": [
-        "splatmap_0.png"
-    ],
+    "splatmaps": [],
     "layers": [
         {
             "layer_index": 0,
             "texture_file": "textures/layer_0_tex_Base.png",
             "u_scale": 1.0,
             "v_scale": 1.0,
-            "splatmap_index": 0,
-            "splatmap_channel": "R"
+            "splatmap_index": -1,
+            "splatmap_channel": "BASE"
         },
         {
             "layer_index": 1,

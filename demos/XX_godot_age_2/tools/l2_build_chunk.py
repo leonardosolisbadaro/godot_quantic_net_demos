@@ -1012,7 +1012,8 @@ class L2ChunkCompiler:
         # 5. Empacotamento de Splatmaps RGBA (4 canais por textura)
         splatmap_files = []
         if pack_splatmaps:
-            active_masks = [(idx, img) for (idx, img) in layer_masks if img is not None]
+            # Apenas camadas acima de 0 (que se sobrepõem à base) entram nos splatmaps
+            active_masks = [(idx, img) for (idx, img) in layer_masks if idx > 0 and img is not None]
             splat_idx = 0
             channels = ["R", "G", "B", "A"]
 
