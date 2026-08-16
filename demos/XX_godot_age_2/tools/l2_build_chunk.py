@@ -498,6 +498,22 @@ class UnrealPackageReader:
 
         return props
 
+    def extract_palette(self, pal_ref) -> list:
+        if not pal_ref:
+            return None
+        pal_name = pal_ref.get("object_name") if isinstance(pal_ref, dict) else str(pal_ref)
+        clean_name = pal_name.lower().split('.')[-1]
+        matched = next((e for e in self.exports if e["object_name"].lower() == clean_name), None)
+        if not matched:
+            matched = next((e for e in self.exports if clean_name in e["object_name"].lower()), None)
+        if not matched:
+            return None
+        pal_data = self.data[matched["offset"] : matched["offset"] + matched["size"]]
+        if len(pal_data) >= 1024:
+            raw_colors = pal_data[-1024:]
+            return [raw_colors[i : i + 4] for i in range(0, 1024, 4)]
+        return None
+
     def extract_image_by_export_name(self, target_name: str) -> Image.Image:
         if not target_name:
             return None
@@ -524,6 +540,7 @@ class UnrealPackageReader:
         format_val = props.get("Format")
         u_size = props.get("USize", 0)
         v_size = props.get("VSize", 0)
+        pal_ref = props.get("Palette")
 
         exp_data = self.data[matched["offset"] : matched["offset"] + matched["size"]]
 
@@ -538,29 +555,66 @@ class UnrealPackageReader:
             footer_pattern = struct.pack("<II", rw, rh)
             pos = exp_data.rfind(footer_pattern)
             if pos != -1:
-                # DXT1 (Format 3)
+                # 1. P8 / Palettized 8-bit (Format 0, None ou possui Palette declarada)
+                if pal_ref is not None or format_val in (0, None):
+                    p8_sz = rw * rh
+                    if pos >= p8_sz:
+                        raw_indices = exp_data[pos - p8_sz : pos]
+                        indices_arr = np.frombuffer(raw_indices, dtype=np.uint8)
+                        pal_colors = self.extract_palette(pal_ref) if pal_ref else None
+                        
+                        lut_r = np.zeros(256, dtype=np.uint8)
+                        lut_g = np.zeros(256, dtype=np.uint8)
+                        lut_b = np.zeros(256, dtype=np.uint8)
+                        
+                        if pal_colors and len(pal_colors) == 256:
+                            for c_i, c_val in enumerate(pal_colors):
+                                lut_r[c_i] = c_val[0]
+                                lut_g[c_i] = c_val[1]
+                                lut_b[c_i] = c_val[2]
+                        else:
+                            lut_r = np.arange(256, dtype=np.uint8)
+                            lut_g = lut_r
+                            lut_b = lut_r
+                            
+                        # Se for em tons de cinza (ex: máscara alfa de terreno)
+                        if np.array_equal(lut_r, lut_g) and np.array_equal(lut_g, lut_b):
+                            decoded_arr = lut_r[indices_arr].reshape((rh, rw))
+                            return Image.fromarray(decoded_arr, mode='L')
+                        else:
+                            rgb_arr = np.stack([
+                                lut_r[indices_arr].reshape((rh, rw)),
+                                lut_g[indices_arr].reshape((rh, rw)),
+                                lut_b[indices_arr].reshape((rh, rw))
+                            ], axis=-1)
+                            return Image.fromarray(rgb_arr, mode='RGB')
+
+                # 2. DXT1 (Format 3)
                 if format_val == 3:
                     dxt1_sz = (rw * rh) // 2
                     if pos >= dxt1_sz:
                         img = decode_dxt1_to_image(exp_data[pos - dxt1_sz : pos], rw, rh)
                         if img:
                             return img
-                # DXT3 / DXT5 (Format 5 ou 6)
+
+                # 3. DXT3 / DXT5 (Format 5 ou 6)
                 elif format_val in (5, 6):
                     dxt5_sz = rw * rh
                     if pos >= dxt5_sz:
                         img = decode_dxt5_to_image(exp_data[pos - dxt5_sz : pos], rw, rh)
                         if img:
                             return img
-                # G8 / Grayscale (Format 7)
+
+                # 4. G8 / Grayscale (Format 7)
                 elif format_val == 7:
                     g8_sz = rw * rh
                     if pos >= g8_sz:
                         g8_raw = exp_data[pos - g8_sz : pos]
                         arr = np.frombuffer(g8_raw, dtype=np.uint8).reshape((rh, rw))
                         return Image.fromarray(arr, mode='L')
+
+                # 5. Fallback DXT1
                 else:
-                    # Fallback
                     dxt1_sz = (rw * rh) // 2
                     if pos >= dxt1_sz:
                         img = decode_dxt1_to_image(exp_data[pos - dxt1_sz : pos], rw, rh)
@@ -1039,21 +1093,7 @@ class L2ChunkCompiler:
         Image.fromarray(heights.astype(np.uint16)).save(hm_path, format="PNG")
         generated.append(hm_path)
 
-        # 3. Macro Lightmap (_C)
-        pkg_terrain = self.env.get_package(f"t_{self.clean_stem}") or self.env.get_package(self.clean_stem) or self.pkg
-        lightmap_file = None
-        if pkg_terrain:
-            for exp in pkg_terrain.exports:
-                if exp["object_name"].lower().endswith("_c") or exp["object_name"].lower() == f"{self.clean_stem}_c":
-                    lm_img = pkg_terrain.extract_image_by_export_name(exp["object_name"])
-                    if lm_img:
-                        lm_path = self.client_dir / "lightmap.png"
-                        lm_img.save(lm_path, format="PNG")
-                        lightmap_file = "lightmap.png"
-                        generated.append(lm_path)
-                        break
-
-        # 4. Extração de Texturas Difusas
+        # 3. Extração de Texturas Difusas e Máscaras de Camada
         recipe_layers = []
         active_masks = []
         for l in terrain_info.get("layers", []):
@@ -1084,16 +1124,17 @@ class L2ChunkCompiler:
                 if alpha_pkg:
                     mask_img = alpha_pkg.extract_image_by_export_name(obj_name)
 
-            if mask_img is not None:
+            if idx > 0 and mask_img is not None:
                 active_masks.append((idx, mask_img))
 
             recipe_layers.append({
                 "layer_index": idx,
+                "texture_file": diffuse_file,
                 "diffuse_texture": diffuse_file,
                 "u_scale": u_sc,
                 "v_scale": v_sc,
-                "splatmap_index": 0,
-                "splatmap_channel": "r"
+                "splatmap_index": -1 if idx == 0 else 0,
+                "splatmap_channel": "BASE" if idx == 0 else "r"
             })
 
         # 5. Empacotamento de Splatmaps RGBA
@@ -1118,7 +1159,6 @@ class L2ChunkCompiler:
 
                     for ch_idx, (layer_orig_idx, m_img) in enumerate(batch):
                         m_resized = m_img.convert("L").resize((splat_w, splat_h), resample=Image.Resampling.BICUBIC)
-                        m_resized = m_resized.filter(ImageFilter.GaussianBlur(radius=0.75))
                         rgba_arr[:, :, ch_idx] = np.array(m_resized)
 
                         for r_l in recipe_layers:
@@ -1133,10 +1173,10 @@ class L2ChunkCompiler:
                     generated.append(splat_path)
                     splat_idx += 1
 
-        # 6. terrain_recipe.json
+        # 5. terrain_recipe.json
         recipe = {
             "chunk_name": self.clean_stem,
-            "lightmap": lightmap_file,
+            "lightmap": None,
             "splatmaps": splatmap_files,
             "layers": recipe_layers
         }

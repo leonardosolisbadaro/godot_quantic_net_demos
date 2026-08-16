@@ -60,18 +60,6 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 		var mat = ShaderMaterial.new()
 		mat.shader = TerrainShader
 
-		# Configura Lightmap
-		var lm_file = recipe.get("lightmap")
-		if lm_file and lm_file is String and not lm_file.is_empty():
-			var lm_tex = adapter.load_texture_file(chunk_name, lm_file)
-			if lm_tex:
-				mat.set_shader_parameter("lightmap_tex", lm_tex)
-				mat.set_shader_parameter("has_lightmap", true)
-			else:
-				mat.set_shader_parameter("has_lightmap", false)
-		else:
-			mat.set_shader_parameter("has_lightmap", false)
-
 		# Configura Splatmaps
 		var splatmaps = recipe.get("splatmaps", [])
 		for i in range(splatmaps.size()):
@@ -89,6 +77,8 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 		for l in layers:
 			var idx = int(l.get("layer_index", 0))
 			var tex_file = l.get("texture_file")
+			if not tex_file or (tex_file is String and tex_file.is_empty()):
+				tex_file = l.get("diffuse_texture")
 			var u_sc = float(l.get("u_scale", 1.0))
 			var v_sc = float(l.get("v_scale", 1.0))
 

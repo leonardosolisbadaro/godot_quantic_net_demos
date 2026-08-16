@@ -42,7 +42,7 @@ Roadmap e tarefas específicas para a infraestrutura e implementação desta dem
 
 ### [CONGELADO PARA O FUTURO] Backlog de Refinamento Visual e Recursos Avançados
 
-- [ ] Investigar a causa raiz do padrão de repetição/alinhamento residual em máscaras específicas de terreno (investigar formatos DXT3/P8 no UE2).
+- [x] Investigação e implementação do suporte nativo ao formato `TEXF_P8` (Palettized 8-bit com Palettes do UE2), eliminando ruídos em degrau em máscaras como `17_25_S2`.
 - [ ] Implementar shader e malha de água reflexiva (`FluidSurfaceActor` / Ocean Plane) para cobrir chunks marítimos como `17_24`, eliminando a necessidade de textura de fundo exposta.
 - [ ] Adicionar blended borders / stitching visual nos limites entre chunks vizinhos.
 - [ ] Suporte CLI `--offline` no Cliente: permitir rodar e inspecionar o mundo 3D sem necessidade de conexão ou subida de servidor em segundo plano (PawnViewer integrado).

@@ -3,13 +3,10 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
 // --- Configuração Global de Tiling e Iluminação ---
 uniform float base_tiling : hint_range(1.0, 128.0) = 32.0;
-uniform bool has_lightmap = false;
-uniform float lightmap_intensity : hint_range(0.0, 4.0) = 1.3;
 uniform float roughness : hint_range(0.0, 1.0) = 0.85;
-uniform float specular : hint_range(0.0, 1.0) = 0.10;
+uniform float specular : hint_range(0.0, 1.0) = 0.15;
 
-// --- Macro Lightmap e Splatmaps RGBA ---
-uniform sampler2D lightmap_tex : source_color, filter_linear_mipmap, repeat_disable;
+// --- Splatmaps RGBA ---
 uniform sampler2D splatmap_0 : filter_linear_mipmap, repeat_disable;
 uniform sampler2D splatmap_1 : filter_linear_mipmap, repeat_disable;
 uniform sampler2D splatmap_2 : filter_linear_mipmap, repeat_disable;
@@ -67,8 +64,7 @@ void fragment() {
 	vec4 s2 = texture(splatmap_2, uv);
 
 	// 2. Inicia com a Camada Base
-	vec3 base_tex_sample = texture(tex_base, uv * uv_scale_base * base_tiling).rgb;
-	vec3 color = base_tex_sample;
+	vec3 color = texture(tex_base, uv * uv_scale_base * base_tiling).rgb;
 
 	// 3. Aplica a mistura linear (Mix) estritamente onde a camada existe
 	if (has_layer_1 && s0.r > 0.001) {
@@ -101,14 +97,7 @@ void fragment() {
 		color = mix(color, texture(tex_layer_9, uv * uv_scale_9 * base_tiling).rgb, s2.r);
 	}
 
-	// 4. Modulação com Lightmap (com fallback de luz neutra)
-	vec3 lm = vec3(1.0);
-	if (has_lightmap) {
-		vec3 raw_lm = texture(lightmap_tex, uv).rgb;
-		lm = mix(vec3(1.0), raw_lm * lightmap_intensity, 0.7);
-	}
-
-	ALBEDO = color * lm;
+	ALBEDO = color;
 	ROUGHNESS = roughness;
 	SPECULAR = specular;
 }

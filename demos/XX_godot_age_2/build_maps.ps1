@@ -136,7 +136,16 @@ if ($unrFiles.Count -gt 0) {
 $TotalTimer.Stop()
 $totalSecs = [math]::Round($TotalTimer.Elapsed.TotalSeconds, 2)
 
-# 5. Relatorio Final de Compilacao
+# 5. Sincronizacao / Importacao Automatica no Godot 4.7
+$godotExe = "C:\Users\LEONARDO\Documents\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe"
+if (Test-Path $godotExe) {
+    Write-Host ""
+    Write-Host "[*] Sincronizando e importando novos assets no Godot 4.7..." -ForegroundColor Cyan
+    & $godotExe --path "$ScriptRoot" --headless --editor --quit | Out-Null
+    Write-Host "[OK] Assets importados com sucesso na engine!" -ForegroundColor Green
+}
+
+# 6. Relatorio Final de Compilacao
 Write-Host ""
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host " [*] RESUMO DO PROCESSO DE BUILD" -ForegroundColor Green
