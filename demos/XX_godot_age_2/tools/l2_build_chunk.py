@@ -32,7 +32,7 @@ if sys.platform == "win32":
 
 UE2_PACKAGE_TAG = 0x9E2A83C1
 L2_BLOWFISH_KEY = b"lineage2"
-UU_TO_METERS_DEFAULT = 1.0 / 52.5  # 1 UU ≈ 0.0190476 metros (padrão Unreal / L2)
+UU_TO_METERS_DEFAULT = 1.0 / 6.5625  # 1 UU ≈ 0.152381 metros (Escala 4x Continental: 4993.2m por chunk)
 
 
 # ==============================================================================

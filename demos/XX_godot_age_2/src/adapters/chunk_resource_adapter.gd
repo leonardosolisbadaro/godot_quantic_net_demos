@@ -11,12 +11,34 @@
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 
 const TerrainChunkData = preload("../domain/terrain_chunk_data.gd")
+const OceanEnvironmentData = preload("../domain/ocean_environment_data.gd")
 
 var base_maps_path: String = "res://assets/maps"
 
 
 func _init(p_base_path: String = "res://assets/maps") -> void:
 	base_maps_path = p_base_path
+
+
+func load_ocean_config() -> RefCounted:
+	var config_path = "%s/sea_config.json" % base_maps_path
+	if not FileAccess.file_exists(config_path):
+		return OceanEnvironmentData.new()
+
+	var file = FileAccess.open(config_path, FileAccess.READ)
+	if not file:
+		return OceanEnvironmentData.new()
+
+	var json_str = file.get_as_text()
+	file.close()
+
+	var json = JSON.new()
+	var err = json.parse(json_str)
+	if err != OK or not (json.data is Dictionary):
+		return OceanEnvironmentData.new()
+
+	return OceanEnvironmentData.from_dictionary(json.data)
+
 
 
 func load_chunk_meta(chunk_name: String) -> TerrainChunkData:

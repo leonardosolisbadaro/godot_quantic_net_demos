@@ -19,19 +19,21 @@ const MAX_FALL_SPEED := 45.0
 const JUMP_VELOCITY := 8.5
 
 const CAMERA_START_ROT := Vector3(-25.0, 0.0, 0.0)
-const CAMERA_DEFAULT_SPRING_LENGTH := 18.0
+const CAMERA_DEFAULT_SPRING_LENGTH := 6.0
 const CAMERA_SPRING_MARGIN := 0.2
 const CAMERA_TARGET_Y_OFFSET := 1.4
 const CAMERA_LERP_SPEED := 12.0
 const MOUSE_SENSITIVITY := 0.3
 const CAMERA_PITCH_MIN := -65.0
 const CAMERA_PITCH_MAX := 40.0
-const ZOOM_MIN := 3.0
-const ZOOM_MAX := 100.0
+const ZOOM_MIN := 2.0
+const ZOOM_MAX := 1000.0
 const ZOOM_STEP := 2.0
 
 var is_local: bool = true
 var peer_id: int = 1
+var min_fall_limit_y: float = -500.0
+var safe_spawn_position: Vector3 = Vector3.ZERO
 
 var _camera_pivot: Node3D
 var _spring_arm: SpringArm3D
@@ -276,20 +278,25 @@ func _process_local_movement(delta: float) -> void:
 
 	move_and_slide()
 
-	# 3. Proteção Anti-Limbo
-	if position.y < -250.0:
+	# 3. Proteção Anti-Limbo Dinâmica (Abaixo da cota mais baixa do cluster)
+	if position.y < min_fall_limit_y:
 		var space_state = get_world_3d().direct_space_state
+		var recovered := false
 		if space_state:
 			var query = PhysicsRayQueryParameters3D.create(
-				Vector3(position.x, 50.0, position.z),
-				Vector3(position.x, -250.0, position.z)
+				Vector3(position.x, 200.0, position.z),
+				Vector3(position.x, min_fall_limit_y, position.z)
 			)
 			query.exclude = [get_rid()]
 			var hit = space_state.intersect_ray(query)
 			if hit and not hit.is_empty():
-				global_position = hit.position
-			else:
-				position.y = -50.0
+				global_position = hit.position + Vector3(0.0, 0.5, 0.0)
+				recovered = true
+
+		if not recovered:
+			# Se caiu fora dos limites do cluster, reposiciona no ponto de spawn seguro
+			global_position = safe_spawn_position
+
 		velocity = Vector3.ZERO
 		_air_momentum_velocity = Vector3.ZERO
 

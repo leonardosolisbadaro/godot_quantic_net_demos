@@ -22,9 +22,9 @@ const PORT := 4242
 const SECRET := "secret"
 const CLUSTER := ["16_24", "16_25", "17_24", "17_25"]
 
-# Ponto de Spawn suave na planície/estrada de Talking Island
-const SPAWN_X := -2300.0
-const SPAWN_Z := 4120.0
+# Ponto de Spawn suave na junção dos 4 chunks de Talking Island (estrada da falésia)
+const SPAWN_X := -14972.0
+const SPAWN_Z := 34959.0
 
 var _is_server: bool = false
 var _server_world: ServerWorldManager
@@ -128,14 +128,17 @@ func _start_client() -> void:
 	_server_world.load_cluster(CLUSTER)
 
 	var ground_y = _server_world.get_height_at(SPAWN_X, SPAWN_Z)
+	var min_world_y = _server_world.get_min_world_altitude()
 
 	# 3. Instancia o Avatar do Jogador Local exatamente rente ao solo (Zero-Drop Spawn)
 	_local_player = PlayerAvatar.new()
 	_local_player.name = "LocalPlayer"
 	_local_player.is_local = true
+	_local_player.safe_spawn_position = Vector3(SPAWN_X, ground_y, SPAWN_Z)
+	_local_player.min_fall_limit_y = min_world_y - 50.0  # 50m abaixo do ponto mais profundo do cluster
 	_local_player.position = Vector3(SPAWN_X, ground_y, SPAWN_Z)
 	add_child(_local_player)
-	print("[CLIENT] Avatar instanciado perfeitamente rente ao solo na altitude: %.2fm" % ground_y)
+	print("[CLIENT] Avatar instanciado perfeitamente rente ao solo na altitude: %.2fm (Gatilho Anti-Limbo: %.2fm)" % [ground_y, _local_player.min_fall_limit_y])
 
 	# 4. Instancia a HUD de Depuração de Coordenadas
 	_debug_hud = DebugHUD.new()

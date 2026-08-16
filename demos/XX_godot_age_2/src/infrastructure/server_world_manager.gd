@@ -92,3 +92,19 @@ func validate_player_move(
 ) -> Dictionary:
 	var sampler = find_sampler_at(requested_pos.x, requested_pos.z)
 	return _validate_move_uc.execute(current_pos, requested_pos, delta_time, max_speed, sampler)
+
+
+func get_min_world_altitude() -> float:
+	var min_alt: float = 0.0
+	var first: bool = true
+	for c_name in _samplers:
+		var s: HeightfieldSampler = _samplers[c_name]
+		if s and not s.heights.is_empty():
+			for h in s.heights:
+				if first or h < min_alt:
+					min_alt = h
+					first = false
+	if first:
+		return -600.0
+	return min_alt
+

@@ -77,11 +77,16 @@ func _process(_delta: float) -> void:
 	text += "Chunk Atual: %s\n" % current_chunk_name
 	text += "Global:  X: %8.2f  Y: %8.2f  Z: %8.2f\n" % [g_pos.x, g_pos.y, g_pos.z]
 	text += "Local:   X: %8.2f  Y: %8.2f  Z: %8.2f\n" % [l_pos.x, l_pos.y, l_pos.z]
-	text += "FPS: %d | [F1] Colisor | [F2] Wireframe" % Engine.get_frames_per_second()
+	text += "FPS: %d | [F1] Colisor | [F2] Wireframe | [F3] HUD" % Engine.get_frames_per_second()
 
 	_label_info.text = text
+
+
+func toggle_visibility() -> void:
+	visible = not visible
 
 
 func update_chunk_context(p_chunk_name: String, p_origin: Vector3) -> void:
 	current_chunk_name = p_chunk_name
 	chunk_origin = p_origin
+
