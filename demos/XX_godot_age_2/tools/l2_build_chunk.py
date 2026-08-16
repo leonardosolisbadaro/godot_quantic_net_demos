@@ -635,9 +635,11 @@ def build_terrain_mesh(heights: np.ndarray, scale: tuple, location: tuple, unit_
     sz_world = float(scale[1]) * step * unit_scale  # Em Godot, Z é profundidade horizontal
     sy_scale = float(scale[2]) * unit_scale        # Em Godot, Y é altitude
 
-    # Centraliza a malha em torno da origem local do chunk
-    xs = (np.arange(cols, dtype=np.float32) - (cols / 2.0)) * sx
-    zs = (np.arange(rows, dtype=np.float32) - (rows / 2.0)) * sz_world
+    # Centraliza a malha em torno da origem local do chunk sem frestas de fronteira
+    half_w = (cols * sx) / 2.0
+    half_d = (rows * sz_world) / 2.0
+    xs = np.linspace(-half_w, half_w, cols, dtype=np.float32)
+    zs = np.linspace(-half_d, half_d, rows, dtype=np.float32)
 
     grid_x, grid_z = np.meshgrid(xs, zs)
     # Altitude em metros
@@ -775,6 +777,7 @@ class L2ChunkCompiler:
         if self.clean_stem.lower().startswith("t_"):
             self.clean_stem = self.clean_stem[2:]
 
+        self.output_dir = output_dir
         self.chunk_dir = output_dir / self.clean_stem
         self.server_dir = self.chunk_dir / "server"
         self.client_dir = self.chunk_dir / "client"
@@ -802,6 +805,9 @@ class L2ChunkCompiler:
         if heights is None:
             sys.exit(f"[ERRO] Não foi possível decodificar o Heightmap G16 de {self.input_file.name}")
 
+        # Soldagem contínua de bordas com chunks vizinhos
+        heights = self._weld_neighbors_if_exist(heights, scale)
+
         # 3. Construção da Malha e Cálculo de Altitudes
         positions, normals, uvs, triangles, world_y_matrix = build_terrain_mesh(
             heights, scale, location, self.unit_scale, step
@@ -823,6 +829,57 @@ class L2ChunkCompiler:
 
         # 7. Resumo de Artefatos Gerados
         self._print_artifacts_summary(server_files, client_files, time.time() - start_time)
+
+    def _weld_neighbors_if_exist(self, heights: np.ndarray, scale: tuple) -> np.ndarray:
+        coords = [int(p) for p in self.clean_stem.split("_") if p.isdigit()]
+        if len(coords) < 2:
+            return heights
+        chunk_x, chunk_y = coords[0], coords[1]
+        sy_scale = float(scale[2]) * self.unit_scale
+        scale_factor = sy_scale / 128.0
+
+        # Converte para world_y em float32 para soldagem matemática de precisão
+        wy = (heights.astype(np.float32) - 32768.0) * scale_factor
+
+        # 1. Vizinho Norte (chunk_y + 1) -> Topo (row 255) encontra a base (row 0) do norte
+        north_bin = self.output_dir / f"{chunk_x}_{chunk_y + 1}" / "server" / "heightfield.bin"
+        if north_bin.is_file():
+            north_wy = np.fromfile(north_bin, dtype="<f4").reshape((256, 256)).copy()
+            avg = (wy[255, :] + north_wy[0, :]) / 2.0
+            wy[255, :] = avg
+            north_wy[0, :] = avg
+            with open(north_bin, "wb") as f:
+                f.write(north_wy.tobytes())
+
+        # 2. Vizinho Sul (chunk_y - 1) -> Base (row 0) encontra o topo (row 255) do sul
+        south_bin = self.output_dir / f"{chunk_x}_{chunk_y - 1}" / "server" / "heightfield.bin"
+        if south_bin.is_file():
+            south_wy = np.fromfile(south_bin, dtype="<f4").reshape((256, 256)).copy()
+            avg = (wy[0, :] + south_wy[255, :]) / 2.0
+            wy[0, :] = avg
+            south_wy[255, :] = avg
+            with open(south_bin, "wb") as f:
+                f.write(south_wy.tobytes())
+
+        # 3. Vizinho Leste (chunk_x + 1) -> Direita (col 255) encontra a esquerda (col 0) do leste
+        east_bin = self.output_dir / f"{chunk_x + 1}_{chunk_y}" / "server" / "heightfield.bin"
+        if east_bin.is_file():
+            east_wy = np.fromfile(east_bin, dtype="<f4").reshape((256, 256)).copy()
+            avg = (wy[:, 255] + east_wy[:, 0]) / 2.0
+            wy[:, 255] = avg
+            east_wy[:, 0] = avg
+            with open(east_bin, "wb") as f:
+                f.write(east_wy.tobytes())
+
+        # 4. Vizinho Oeste (chunk_x - 1) -> Esquerda (col 0) encontra a direita (col 255) do oeste
+        west_bin = self.output_dir / f"{chunk_x - 1}_{chunk_y}" / "server" / "heightfield.bin"
+        if west_bin.is_file():
+            west_wy = np.fromfile(west_bin, dtype="<f4").reshape((256, 256)).copy()
+            avg = (wy[:, 0] + west_wy[:, 255]) / 2.0
+            wy[:, 0] = avg
+        # Converte de volta para matriz de inteiros de altura G16
+        welded_heights = np.clip(32768.0 + (wy / scale_factor), 0, 65535).astype(np.uint16)
+        return welded_heights
 
     def _extract_terrains(self):
         terrains = []
@@ -956,7 +1013,7 @@ class L2ChunkCompiler:
             "location_uu": [float(location[0]), float(location[1]), float(location[2])],
             "cell_size_meters": [sx_meters, sz_meters],
             "chunk_dimensions_meters": [cols * sx_meters, rows * sz_meters],
-            "world_origin_meters": [float(location[0]) * self.unit_scale, float(location[2]) * self.unit_scale, float(location[1]) * self.unit_scale],
+            "world_origin_meters": [float(location[0]) * self.unit_scale, 0.0, float(location[1]) * self.unit_scale],
             "altitude_meters": {
                 "min": round(h_min, 3),
                 "max": round(h_max, 3),
@@ -972,12 +1029,12 @@ class L2ChunkCompiler:
     def _generate_client_artifacts(self, terrain_info, heights, positions, normals, uvs, triangles, pack_splatmaps):
         generated = []
 
-        # 1. 16_24_visual.glb
+        # 1. Visual GLB
         glb_path = self.client_dir / f"{self.clean_stem}_visual.glb"
         write_glb(glb_path, self.clean_stem, positions, normals, uvs, triangles)
         generated.append(glb_path)
 
-        # 2. heightmap_16bit.png
+        # 2. Heightmap 16-bit PNG
         hm_path = self.client_dir / "heightmap_16bit.png"
         Image.fromarray(heights.astype(np.uint16)).save(hm_path, format="PNG")
         generated.append(hm_path)
@@ -996,55 +1053,56 @@ class L2ChunkCompiler:
                         generated.append(lm_path)
                         break
 
-        # 4. Texturas Difusas e Máscaras
-        layers = terrain_info.get("layers", [])
-        layer_masks = []
+        # 4. Extração de Texturas Difusas
         recipe_layers = []
-
-        for l in layers:
+        active_masks = []
+        for l in terrain_info.get("layers", []):
             idx = l["index"]
             t_ref = l.get("texture_ref")
             a_ref = l.get("alpha_ref")
-            u_sc = l.get("u_scale", 1.0)
-            v_sc = l.get("v_scale", 1.0)
+            u_sc = l["u_scale"]
+            v_sc = l["v_scale"]
 
-            diff_file = None
-            if isinstance(t_ref, dict) and "object_name" in t_ref:
-                pkg_t = self.env.get_package(t_ref["package"]) or pkg_terrain or self.pkg
-                t_img = pkg_t.extract_image_by_export_name(t_ref["object_name"])
-                if t_img:
-                    t_filename = f"layer_{idx}_tex_{t_ref['object_name']}.png"
-                    t_path = self.client_textures_dir / t_filename
-                    t_img.save(t_path, format="PNG")
-                    diff_file = f"textures/{t_filename}"
-                    generated.append(t_path)
+            diffuse_file = None
+            if t_ref and isinstance(t_ref, dict):
+                pkg_name = t_ref.get("package", "")
+                obj_name = t_ref.get("object_name", "")
+                tex_pkg = self.env.get_package(pkg_name)
+                if tex_pkg:
+                    diff_img = tex_pkg.extract_image_by_export_name(obj_name)
+                    if diff_img:
+                        diffuse_file = f"textures/layer_{idx}_tex_{obj_name}.png"
+                        diff_path = self.client_dir / diffuse_file
+                        diff_img.save(diff_path, format="PNG")
+                        generated.append(diff_path)
 
             mask_img = None
-            if isinstance(a_ref, dict) and "object_name" in a_ref:
-                pkg_a = self.env.get_package(a_ref["package"]) or pkg_terrain or self.pkg
-                a_img = pkg_a.extract_image_by_export_name(a_ref["object_name"])
-                if a_img:
-                    mask_img = a_img.convert("L")
+            if a_ref and isinstance(a_ref, dict):
+                pkg_name = a_ref.get("package", "")
+                obj_name = a_ref.get("object_name", "")
+                alpha_pkg = self.env.get_package(pkg_name)
+                if alpha_pkg:
+                    mask_img = alpha_pkg.extract_image_by_export_name(obj_name)
 
-            layer_masks.append((idx, mask_img))
+            if mask_img is not None:
+                active_masks.append((idx, mask_img))
+
             recipe_layers.append({
                 "layer_index": idx,
-                "texture_file": diff_file,
+                "diffuse_texture": diffuse_file,
                 "u_scale": u_sc,
                 "v_scale": v_sc,
-                "splatmap_index": -1,
-                "splatmap_channel": "BASE"
+                "splatmap_index": 0,
+                "splatmap_channel": "r"
             })
 
-        # 5. Empacotamento de Splatmaps RGBA (4 canais por textura)
+        # 5. Empacotamento de Splatmaps RGBA
         splatmap_files = []
-        if pack_splatmaps:
-            active_masks = [(idx, img) for (idx, img) in layer_masks if idx > 0 and img is not None]
-            splat_idx = 0
-            channels = ["R", "G", "B", "A"]
+        channels = ["r", "g", "b", "a"]
+        splat_idx = 0
 
+        if pack_splatmaps:
             if not active_masks:
-                # Chunk sem camadas extras (ex: oceano puro 17_24): cria splatmap zerado
                 empty_splat = np.zeros((256, 256, 4), dtype=np.uint8)
                 splat_filename = "splatmap_0.png"
                 splat_path = self.client_dir / splat_filename
@@ -1054,18 +1112,15 @@ class L2ChunkCompiler:
             else:
                 for i in range(0, len(active_masks), 4):
                     batch = active_masks[i : i + 4]
-                    # Garante resolução mínima de 1024x1024 para interpolação suave
                     splat_w = max(1024, max(m.size[0] for _, m in batch))
                     splat_h = max(1024, max(m.size[1] for _, m in batch))
                     rgba_arr = np.zeros((splat_h, splat_w, 4), dtype=np.uint8)
 
                     for ch_idx, (layer_orig_idx, m_img) in enumerate(batch):
-                        # Interpolação bicúbica suave + filtro leve para eliminar serrilhado
-                        m_resized = m_img.resize((splat_w, splat_h), resample=Image.Resampling.BICUBIC)
+                        m_resized = m_img.convert("L").resize((splat_w, splat_h), resample=Image.Resampling.BICUBIC)
                         m_resized = m_resized.filter(ImageFilter.GaussianBlur(radius=0.75))
                         rgba_arr[:, :, ch_idx] = np.array(m_resized)
 
-                        # Atualiza a receita
                         for r_l in recipe_layers:
                             if r_l["layer_index"] == layer_orig_idx:
                                 r_l["splatmap_index"] = splat_idx
@@ -1092,9 +1147,6 @@ class L2ChunkCompiler:
 
         return generated
 
-    # ==========================================================================
-    # LOGS ESTRUTURADOS DE TERMINAL
-    # ==========================================================================
     def _print_banner(self):
         print("\n" + "=" * 80)
         print(f"[*] COMPILADOR DE CHUNKS LINEAGE II -> GODOTAGE II")
@@ -1149,11 +1201,114 @@ class L2ChunkCompiler:
 
 
 # ==============================================================================
-# 7. PONTO DE ENTRADA CLI
+# 7. COMPILADOR EM LOTE DE CLUSTER (2-PASS SEAMLESS COMPILATION)
+# ==============================================================================
+def compile_cluster(input_files: list, output_dir: Path, l2_root: Path = None, step: int = 1, pack_splatmaps: bool = True, unit_scale: float = UU_TO_METERS_DEFAULT):
+    start_time = time.time()
+    compilers = {}
+    extracted_data = {}
+
+    print("\n" + "=" * 80)
+    print(f"[*] GODOTAGE II - COMPILADOR EM LOTE DE CLUSTERS (2-PASS SEAMLESS BUILD)")
+    print(f"[*] Total de Chunks a Processar: {len(input_files)}")
+    print("=" * 80)
+
+    # 1. Extração de Todos os Heightmaps do Cluster
+    for inp in input_files:
+        comp = L2ChunkCompiler(inp, output_dir, l2_root, unit_scale)
+        c_name = comp.clean_stem
+        compilers[c_name] = comp
+
+        terrains = comp._extract_terrains()
+        if not terrains:
+            print(f"[AVISO] Nenhum TerrainInfo em {inp.name}, ignorando.")
+            continue
+        t_info = terrains[0]
+        scale = t_info.get("scale", (64.0, 64.0, 32.0))
+        location = t_info.get("location", (0.0, 0.0, 0.0))
+        heights = comp._extract_heightmap(t_info)
+        if heights is None:
+            print(f"[AVISO] Heightmap não encontrado em {inp.name}, ignorando.")
+            continue
+
+        extracted_data[c_name] = {
+            "compiler": comp,
+            "t_info": t_info,
+            "scale": scale,
+            "location": location,
+            "heights": heights.copy()
+        }
+
+    # 2. Sintetizador de Grade Global (Global Grid Vertex Unifier)
+    from collections import defaultdict
+    global_grid = defaultdict(list)
+
+    # Coleta todas as amostras de altura para cada coordenada global da grade do MMO
+    for c_name, data in extracted_data.items():
+        coords = [int(p) for p in c_name.split("_") if p.isdigit()]
+        if len(coords) < 2:
+            continue
+        cx, cy = coords[0], coords[1]
+        h = data["heights"]
+        for r in range(256):
+            for c in range(256):
+                gx = cx * 255 + c
+                gy = cy * 255 + r
+                global_grid[(gx, gy)].append(float(h[r, c]))
+
+    # Aplica o valor unificado exato em todos os chunks que compartilham a coordenada
+    for c_name, data in extracted_data.items():
+        coords = [int(p) for p in c_name.split("_") if p.isdigit()]
+        if len(coords) < 2:
+            continue
+        cx, cy = coords[0], coords[1]
+        h = data["heights"]
+        for r in range(256):
+            for c in range(256):
+                gx = cx * 255 + c
+                gy = cy * 255 + r
+                samples = global_grid[(gx, gy)]
+                if len(samples) > 1:
+                    h[r, c] = int(round(sum(samples) / len(samples)))
+
+    # 3. Geração Final dos Artefatos de Física e Gráficos (GLB + Binários)
+    for c_name, data in extracted_data.items():
+        comp = data["compiler"]
+        t_info = data["t_info"]
+        scale = data["scale"]
+        location = data["location"]
+        heights = data["heights"]
+
+        comp._print_banner()
+        comp.server_dir.mkdir(parents=True, exist_ok=True)
+        comp.client_textures_dir.mkdir(parents=True, exist_ok=True)
+
+        positions, normals, uvs, triangles, world_y_matrix = build_terrain_mesh(
+            heights, scale, location, unit_scale, step
+        )
+
+        h_min = float(world_y_matrix.min())
+        h_max = float(world_y_matrix.max())
+        h_delta = h_max - h_min
+
+        comp._print_terrain_info(scale, location, heights.shape, h_min, h_max, h_delta)
+        comp._print_layers_table(t_info.get("layers", []))
+
+        server_files = comp._generate_server_artifacts(heights, world_y_matrix, scale, location, h_min, h_max)
+        client_files = comp._generate_client_artifacts(t_info, heights, positions, normals, uvs, triangles, pack_splatmaps)
+        comp._print_artifacts_summary(server_files, client_files, time.time() - start_time)
+
+    print("\n" + "=" * 80)
+    print(f"[*] Compilação do Cluster Concluída com Sucesso em {time.time() - start_time:.2f}s!")
+    print("=" * 80 + "\n")
+
+
+# ==============================================================================
+# 8. PONTO DE ENTRADA CLI
 # ==============================================================================
 def main():
     parser = argparse.ArgumentParser(description="Compilador de Chunks de Terreno Lineage II -> Godotage II")
-    parser.add_argument("input", help="Caminho do arquivo .unr ou nome do chunk (ex: 16_24.unr)")
+    parser.add_argument("input", nargs="+", help="Caminhos dos arquivos .unr ou nomes dos chunks (ex: 16_24 16_25)")
     parser.add_argument("-o", "--output-dir", default=None, help="Diretório de destino (padrão: demos/XX_godot_age_2/assets/maps)")
     parser.add_argument("--l2-root", default=None, help="Caminho raiz da instalação do Lineage II")
     parser.add_argument("--step", type=int, default=1, help="Downsampling da malha 3D (1 = 100%, 2 = 50%)")
@@ -1162,32 +1317,38 @@ def main():
 
     args = parser.parse_args()
 
-    input_path = Path(args.input)
-    # Se passou apenas '16_24' ou '16_24.unr', procura na raiz do L2
-    if not input_path.is_file():
-        if args.l2_root:
-            cand = Path(args.l2_root) / "maps" / (input_path.name if input_path.suffix else f"{input_path.name}.unr")
-            if cand.is_file():
-                input_path = cand
-        elif (Path("C:/Users/LEONARDO/Documents/Lineage II/maps") / f"{input_path.stem}.unr").is_file():
-            input_path = Path("C:/Users/LEONARDO/Documents/Lineage II/maps") / f"{input_path.stem}.unr"
+    resolved_inputs = []
+    for raw_inp in args.input:
+        inp_path = Path(raw_inp)
+        if not inp_path.is_file():
+            if args.l2_root:
+                cand = Path(args.l2_root) / "maps" / (inp_path.name if inp_path.suffix else f"{inp_path.name}.unr")
+                if cand.is_file():
+                    inp_path = cand
+            elif (Path("C:/Users/LEONARDO/Documents/Lineage II/maps") / f"{inp_path.stem}.unr").is_file():
+                inp_path = Path("C:/Users/LEONARDO/Documents/Lineage II/maps") / f"{inp_path.stem}.unr"
 
-    if not input_path.is_file():
-        sys.exit(f"[ERRO] Arquivo .unr não encontrado: {args.input}")
+        if inp_path.is_file():
+            resolved_inputs.append(inp_path)
+        else:
+            print(f"[AVISO] Arquivo .unr não encontrado para: {raw_inp}")
+
+    if not resolved_inputs:
+        sys.exit("[ERRO] Nenhum arquivo .unr válido encontrado para compilação.")
 
     if args.output_dir:
         out_dir = Path(args.output_dir)
     else:
-        # Padrão do projeto
         out_dir = Path(__file__).resolve().parent.parent / "assets" / "maps"
 
-    compiler = L2ChunkCompiler(
-        input_file=input_path,
+    compile_cluster(
+        input_files=resolved_inputs,
         output_dir=out_dir,
         l2_root=Path(args.l2_root) if args.l2_root else None,
+        step=args.step,
+        pack_splatmaps=not args.no_splat,
         unit_scale=args.unit_scale
     )
-    compiler.compile(step=args.step, pack_splatmaps=not args.no_splat)
 
 
 if __name__ == "__main__":

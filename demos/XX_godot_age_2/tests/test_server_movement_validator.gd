@@ -12,8 +12,8 @@
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends "res://addons/gut/test.gd"
 
-const HeightfieldSampler = preload("res://src/domain/heightfield_sampler.gd")
-const ServerMovementValidator = preload("res://src/domain/server_movement_validator.gd")
+const HeightfieldSampler = preload("../src/domain/heightfield_sampler.gd")
+const ServerMovementValidator = preload("../src/domain/server_movement_validator.gd")
 
 var _validator: ServerMovementValidator
 var _sampler: HeightfieldSampler
@@ -25,7 +25,7 @@ func before_each() -> void:
 	var heights = PackedFloat32Array([10.0, 10.0, 10.0, 10.0])
 	_sampler = HeightfieldSampler.new(
 		heights, 2, 2, 50.0, 50.0,
-		Vector3(25.0, 10.0, 25.0), 50.0, 50.0
+		Vector3(25.0, 0.0, 25.0), 50.0, 50.0
 	)
 
 

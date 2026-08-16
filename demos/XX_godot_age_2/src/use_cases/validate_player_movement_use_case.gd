@@ -10,8 +10,8 @@
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 
-const ServerMovementValidator = preload("res://src/domain/server_movement_validator.gd")
-const HeightfieldSampler = preload("res://src/domain/heightfield_sampler.gd")
+const ServerMovementValidator = preload("../domain/server_movement_validator.gd")
+const HeightfieldSampler = preload("../domain/heightfield_sampler.gd")
 
 var _validator: ServerMovementValidator
 

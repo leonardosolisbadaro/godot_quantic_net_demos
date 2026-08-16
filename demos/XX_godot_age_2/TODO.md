@@ -28,19 +28,21 @@ Roadmap e tarefas específicas para a infraestrutura e implementação desta dem
 ### Etapa 3: Shader e Terreno no Cliente Godot 4.7
 
 - [x] Criar Shader multi-textura no Godot 4.7 (`src/infrastructure/l2_terrain.gdshader`) consumindo os Splatmaps RGBA e o Lightmap.
-- [x] Configurar streaming e colisão local com `HeightMapShape3D` (`ChunkManager`, `L2TerrainChunkNode`, `BuildChunkCollisionUseCase`).
+- [x] Configurar streaming e colisão local com `ConcavePolygonShape3D` contínua eliminando frestas de fronteira (`ChunkManager`, `L2TerrainChunkNode`).
 - [x] Validar carregamento contínuo em memória e renderização limpa do cluster 2x2.
-
-### [CONGELADO PARA O FUTURO] Backlog de Refinamento Visual do Cliente (Etapa 3.1)
-
-- [ ] Investigar a causa raiz do padrão de repetição/alinhamento residual em máscaras específicas de terreno (investigar formatos DXT3/P8 no UE2).
-- [ ] Implementar shader e malha de água reflexiva (`FluidSurfaceActor` / Ocean Plane) para cobrir chunks marítimos como `17_24`, eliminando a necessidade de textura de fundo exposta.
-- [ ] Adicionar blended borders / stitching visual nos limites entre chunks vizinhos.
 
 ### Etapa 4: Validação de Altura e Física no Servidor QuanticNet
 
 - [x] Criação da entidade de domínio puro `HeightfieldSampler` com interpolação bilinear $O(1)$ sobre o buffer `server/heightfield.bin`.
 - [x] Criação do caso de uso `ValidatePlayerMovementUseCase` e `ServerMovementValidator` (anti-cheat autoritativo contra fly-hack, speed-hack e queda livre).
 - [x] Criação do `ServerWorldManager` e `QuanticNetServerAdapter` dedicados para o servidor headless ($< 5\text{ MB}$ de RAM para o cluster).
-- [x] Implementação do avatar em terceira pessoa `PlayerAvatar` (`CharacterBody3D`, `SpringArm3D`, mouse look, zoom e sincronização via QuanticNet).
+- [x] Implementação do avatar em terceira pessoa `PlayerAvatar` (`CharacterBody3D`, `SpringArm3D`, inércia de queda, câmera orbital e sincronização QuanticNet).
+- [x] Implementação de visualizadores de depuração de colisão (`F1` para cápsula do avatar e `F2` para wireframe do terreno).
 - [x] Testes unitários com GUT (AAA) cobrindo interpolação de terreno e regras de movimentação autoritativa (12 testes passando).
+
+### [CONGELADO PARA O FUTURO] Backlog de Refinamento Visual e Recursos Avançados
+
+- [ ] Investigar a causa raiz do padrão de repetição/alinhamento residual em máscaras específicas de terreno (investigar formatos DXT3/P8 no UE2).
+- [ ] Implementar shader e malha de água reflexiva (`FluidSurfaceActor` / Ocean Plane) para cobrir chunks marítimos como `17_24`, eliminando a necessidade de textura de fundo exposta.
+- [ ] Adicionar blended borders / stitching visual nos limites entre chunks vizinhos.
+- [ ] Suporte CLI `--offline` no Cliente: permitir rodar e inspecionar o mundo 3D sem necessidade de conexão ou subida de servidor em segundo plano (PawnViewer integrado).

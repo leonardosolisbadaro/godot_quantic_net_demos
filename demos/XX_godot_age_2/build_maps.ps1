@@ -1,5 +1,5 @@
 param (
-    [Alias("m", "map")]
+    [Alias("m", "map", "c", "chunk", "chunks")]
     [Parameter(Position=0, Mandatory=$false, ValueFromRemainingArguments=$true)]
     [string[]]$maps = @(),
 
@@ -56,12 +56,13 @@ $TargetMaps = @()
 
 if ($maps.Count -gt 0) {
     foreach ($m in $maps) {
-        if ($m -ne "") {
+        if ($m -ne "" -and -not $m.StartsWith("-")) {
             # Se for uma string separada por virgula ou espaco
             $splitItems = $m -split "[, ]+"
             foreach ($sub in $splitItems) {
-                if ($sub.Trim() -ne "") {
-                    $TargetMaps += $sub.Trim()
+                $trimmed = $sub.Trim()
+                if ($trimmed -ne "" -and -not $trimmed.StartsWith("-")) {
+                    $TargetMaps += $trimmed
                 }
             }
         }
@@ -103,41 +104,33 @@ $SuccessCount = 0
 $ErrorCount = 0
 $TotalTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
-# 4. Loop de Compilacao
-$CurrentIndex = 0
+# 4. Compilacao Unificada em Lote (2-Pass Seamless Alignment)
+$unrFiles = @()
 foreach ($mapItem in $TargetMaps) {
-    $CurrentIndex++
     $cleanName = [System.IO.Path]::GetFileNameWithoutExtension($mapItem)
     $unrFile = Join-Path $MapsDir "$cleanName.unr"
-
-    Write-Host "[$CurrentIndex/$($TargetMaps.Count)] Processando Chunk: '$cleanName'..." -ForegroundColor Cyan
-
-    if (-not (Test-Path $unrFile)) {
+    if (Test-Path $unrFile) {
+        $unrFiles += $unrFile
+    } else {
         Write-Host "    [X] Arquivo .unr nao encontrado: $unrFile" -ForegroundColor Red
         $ErrorCount++
-        continue
+    }
+}
+
+if ($unrFiles.Count -gt 0) {
+    $cmdArgs = @($unrFiles) + @("--output-dir", "$TargetOutputDir", "--l2-root", "$l2Root", "--step", "$step")
+    if ($noSplat) {
+        $cmdArgs += "--no-splat"
     }
 
-    $chunkTimer = [System.Diagnostics.Stopwatch]::StartNew()
-    
-    if ($noSplat) {
-        python $PythonScript "$unrFile" --output-dir "$TargetOutputDir" --l2-root "$l2Root" --step $step --no-splat
-    } else {
-        python $PythonScript "$unrFile" --output-dir "$TargetOutputDir" --l2-root "$l2Root" --step $step
-    }
-    
+    python $PythonScript @cmdArgs
     $exitCode = $LASTEXITCODE
-    $chunkTimer.Stop()
-    $chunkSecs = [math]::Round($chunkTimer.Elapsed.TotalSeconds, 2)
 
     if ($exitCode -eq 0) {
-        $SuccessCount++
-        Write-Host "    [OK] Chunk '$cleanName' compilado com sucesso em ${chunkSecs}s" -ForegroundColor Green
+        $SuccessCount = $unrFiles.Count
     } else {
-        $ErrorCount++
-        Write-Host "    [ERRO] Falha ao compilar o chunk '$cleanName' (Exit Code: $exitCode)" -ForegroundColor Red
+        $ErrorCount += $unrFiles.Count
     }
-    Write-Host "--------------------------------------------------------------------------------" -ForegroundColor DarkGray
 }
 
 $TotalTimer.Stop()

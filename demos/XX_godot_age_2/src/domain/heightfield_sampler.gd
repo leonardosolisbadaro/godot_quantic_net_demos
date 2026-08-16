@@ -3,10 +3,10 @@
 ##
 ## @description
 ## Entidade de domínio puro para amostragem matemática e interpolação bilinear
-## em tempo constante O(1) de matrizes de elevação de terreno.
+## em tempo constante O(1) de matrizes de elevação de terreno em coordenadas mundiais.
 ##
 ## @created 2026-08-15
-## @updated 2026-08-15
+## @updated 2026-08-16
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 
@@ -42,27 +42,24 @@ func _init(
 
 func get_height_at(world_x: float, world_z: float) -> float:
 	if heights.is_empty() or grid_width <= 0 or grid_depth <= 0:
-		return 0.0
+		return world_origin.y
 
-	# 1. Converte a coordenada de mundo para coordenadas locais relativas ao topo-esquerdo do chunk
+	# 1. Converte a coordenada de mundo para coordenadas locais [0 .. total_width/depth]
 	var half_w = total_width / 2.0
 	var half_d = total_depth / 2.0
 	var local_x = world_x - (world_origin.x - half_w)
 	var local_z = world_z - (world_origin.z - half_d)
 
-	# 2. Converte para coordenadas de grade contínua
-	var u = local_x / cell_size_x
-	var v = local_z / cell_size_z
+	# 2. Converte para coordenadas normalizadas [0 .. 1] e mapeia para a grade de vértices [0 .. grid - 1]
+	var norm_x = clampf(local_x / maxf(total_width, 0.001), 0.0, 1.0)
+	var norm_z = clampf(local_z / maxf(total_depth, 0.001), 0.0, 1.0)
 
-	# Clamping seguro dentro dos limites da grade de vértices
-	var max_gx = float(grid_width - 1)
-	var max_gz = float(grid_depth - 1)
-	u = clampf(u, 0.0, max_gx)
-	v = clampf(v, 0.0, max_gz)
+	var u = norm_x * float(grid_width - 1)
+	var v = norm_z * float(grid_depth - 1)
 
 	# 3. Identifica a célula (quad) e os fatores de interpolação sub-célula [0..1]
-	var gx0 = int(u)
-	var gz0 = int(v)
+	var gx0 = clampi(int(floor(u)), 0, grid_width - 1)
+	var gz0 = clampi(int(floor(v)), 0, grid_depth - 1)
 	var gx1 = mini(gx0 + 1, grid_width - 1)
 	var gz1 = mini(gz0 + 1, grid_depth - 1)
 
@@ -75,7 +72,7 @@ func get_height_at(world_x: float, world_z: float) -> float:
 	var h01 = heights[gz1 * grid_width + gx0]
 	var h11 = heights[gz1 * grid_width + gx1]
 
-	# 5. Interpolação Bilinear
+	# 5. Interpolação Bilinear somada à altitude mundial da origem do chunk
 	var h_top = lerpf(h00, h10, tx)
 	var h_bottom = lerpf(h01, h11, tx)
-	return lerpf(h_top, h_bottom, tz)
+	return world_origin.y + lerpf(h_top, h_bottom, tz)

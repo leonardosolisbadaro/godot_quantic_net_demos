@@ -3,30 +3,36 @@
 ##
 ## @description
 ## Ponto de entrada da Demo XX_godot_age_2 (Godotage II / Lineage II MMO).
-## Orquestra o servidor dedicado headless (física e validação autoritativa)
-## e o cliente gráfico (avatar em terceira pessoa, câmera orbital e streaming).
+## Orquestra o servidor dedicado headless (física e validação autoritativa),
+## o cliente gráfico (avatar, câmera orbital, streaming contínuo) e a UI de Depuração.
 ##
 ## @created 2026-08-15
-## @updated 2026-08-15
+## @updated 2026-08-16
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends Node3D
 
-const ChunkManager = preload("res://src/infrastructure/chunk_manager.gd")
-const ServerWorldManager = preload("res://src/infrastructure/server_world_manager.gd")
-const QuanticNetServerAdapter = preload("res://src/adapters/quantic_net_server_adapter.gd")
-const PlayerAvatar = preload("res://src/infrastructure/player_avatar.gd")
+const ChunkManager = preload("src/infrastructure/chunk_manager.gd")
+const ServerWorldManager = preload("src/infrastructure/server_world_manager.gd")
+const QuanticNetServerAdapter = preload("src/adapters/quantic_net_server_adapter.gd")
+const PlayerAvatar = preload("src/infrastructure/player_avatar.gd")
+const DebugHUD = preload("src/infrastructure/debug_hud.gd")
 
 const PORT := 4242
 const SECRET := "secret"
 const CLUSTER := ["16_24", "16_25", "17_24", "17_25"]
+
+# Ponto de Spawn suave na planície/estrada de Talking Island
+const SPAWN_X := -2300.0
+const SPAWN_Z := 4120.0
 
 var _is_server: bool = false
 var _server_world: ServerWorldManager
 var _server_adapter: QuanticNetServerAdapter
 var _chunk_manager: ChunkManager
 var _local_player: PlayerAvatar
-var _remote_players: Dictionary = {}  # { peer_id: PlayerAvatar }
+var _debug_hud: DebugHUD
+var _remote_players: Dictionary = { } # { peer_id: PlayerAvatar }
 
 
 func _ready() -> void:
@@ -37,6 +43,41 @@ func _ready() -> void:
 		_start_server()
 	else:
 		_start_client()
+
+
+func _process(_delta: float) -> void:
+	if _is_server or not _local_player or not _debug_hud or not _server_world:
+		return
+
+	# Atualiza contexto do chunk ativo na UI de Depuração
+	var c_name = _server_world.get_chunk_name_at(_local_player.position.x, _local_player.position.z)
+	if not c_name.is_empty():
+		var sampler = _server_world.find_sampler_at(
+			_local_player.position.x,
+			_local_player.position.z,
+		)
+		if sampler:
+			_debug_hud.update_chunk_context(c_name, sampler.world_origin)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _is_server:
+		return
+
+	# Tecla F2: Alterna Modo de Depuração de Wireframe da Engine (Colisão/Geometria)
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_F2:
+			var vp = get_viewport()
+			if vp:
+				if vp.debug_draw == Viewport.DEBUG_DRAW_DISABLED:
+					vp.debug_draw = Viewport.DEBUG_DRAW_WIREFRAME
+					print("[DEBUG] Viewport Wireframe: ATIVADO")
+				elif vp.debug_draw == Viewport.DEBUG_DRAW_WIREFRAME:
+					vp.debug_draw = Viewport.DEBUG_DRAW_OVERDRAW
+					print("[DEBUG] Viewport Overdraw: ATIVADO")
+				else:
+					vp.debug_draw = Viewport.DEBUG_DRAW_DISABLED
+					print("[DEBUG] Viewport Debug: DESATIVADO")
 
 
 func _notification(what: int) -> void:
@@ -81,24 +122,38 @@ func _start_client() -> void:
 	add_child(_chunk_manager)
 	_chunk_manager.load_cluster(CLUSTER)
 
-	# 2. Instancia o Avatar do Jogador Local em Terceira Pessoa
+	# 2. Obtém a altitude exata do terreno no ponto de spawn a partir do sampler
+	_server_world = ServerWorldManager.new("res://assets/maps")
+	add_child(_server_world)
+	_server_world.load_cluster(CLUSTER)
+
+	var ground_y = _server_world.get_height_at(SPAWN_X, SPAWN_Z)
+
+	# 3. Instancia o Avatar do Jogador Local exatamente rente ao solo (Zero-Drop Spawn)
 	_local_player = PlayerAvatar.new()
 	_local_player.name = "LocalPlayer"
 	_local_player.is_local = true
-	_local_player.position = Vector3(-2184.5, 30.0, 4056.9)
+	_local_player.position = Vector3(SPAWN_X, ground_y, SPAWN_Z)
 	add_child(_local_player)
+	print("[CLIENT] Avatar instanciado perfeitamente rente ao solo na altitude: %.2fm" % ground_y)
 
-	# 3. Conecta ao Servidor QuanticNet
+	# 4. Instancia a HUD de Depuração de Coordenadas
+	_debug_hud = DebugHUD.new()
+	_debug_hud.target_player = _local_player
+	add_child(_debug_hud)
+
+	# 5. Conecta ao Servidor QuanticNet (se não estiver em modo isolado)
+	var args = OS.get_cmdline_user_args()
+	var is_offline = "--offline" in args or "--solo" in args
+
 	var qn = get_node_or_null("/root/QuanticNet")
-	if qn:
-		var use_netem = "--netem" in OS.get_cmdline_user_args()
+	if qn and not is_offline:
+		var use_netem = "--netem" in args
 		print("[CLIENT] Conectando ao host 127.0.0.1:%d (NetEm=%s)..." % [PORT, str(use_netem)])
 		qn.join("127.0.0.1", PORT, SECRET, use_netem)
-
-		# Encapsulamento de Rede e Bypass do SceneTree
 		get_tree().set_multiplayer(qn.get_tree().get_multiplayer(qn.get_path()), self.get_path())
 	else:
-		print("AVISO: QuanticNet nao encontrado. Executando em modo local standalone.")
+		print("[CLIENT] Executando em modo local standalone (Offline).")
 
 
 func _setup_environment() -> void:

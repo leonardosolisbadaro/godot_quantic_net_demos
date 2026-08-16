@@ -11,7 +11,7 @@
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends "res://addons/gut/test.gd"
 
-const TerrainChunkData = preload("res://src/domain/terrain_chunk_data.gd")
+const TerrainChunkData = preload("../src/domain/terrain_chunk_data.gd")
 
 
 func test_instanciacao_padrao() -> void:

@@ -12,7 +12,7 @@
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends "res://addons/gut/test.gd"
 
-const HeightfieldSampler = preload("res://src/domain/heightfield_sampler.gd")
+const HeightfieldSampler = preload("../src/domain/heightfield_sampler.gd")
 
 var _sampler: HeightfieldSampler
 

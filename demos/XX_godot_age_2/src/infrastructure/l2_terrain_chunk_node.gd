@@ -3,18 +3,19 @@
 ##
 ## @description
 ## Nó de infraestrutura 3D que orquestra a apresentação visual (Mesh + Shader)
-## e o corpo físico de colisão local (StaticBody3D + HeightMapShape3D) de um chunk.
+## e o corpo físico de colisão contínua (StaticBody3D + Trimesh / ConcavePolygonShape3D)
+## eliminando frestas entre chunks vizinhos.
 ##
 ## @created 2026-08-15
-## @updated 2026-08-15
+## @updated 2026-08-16
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends Node3D
 
-const TerrainChunkData = preload("res://src/domain/terrain_chunk_data.gd")
-const BuildChunkCollisionUseCase = preload("res://src/use_cases/build_chunk_collision_use_case.gd")
-const ChunkResourceAdapter = preload("res://src/adapters/chunk_resource_adapter.gd")
-const TerrainShader = preload("res://src/infrastructure/l2_terrain.gdshader")
+const TerrainChunkData = preload("../domain/terrain_chunk_data.gd")
+const BuildChunkCollisionUseCase = preload("../use_cases/build_chunk_collision_use_case.gd")
+const ChunkResourceAdapter = preload("../adapters/chunk_resource_adapter.gd")
+const TerrainShader = preload("l2_terrain.gdshader")
 
 var chunk_data: TerrainChunkData
 var visual_instance: Node3D
@@ -40,9 +41,8 @@ func setup(
 	var recipe = p_adapter.load_chunk_recipe(p_chunk_name)
 	_setup_visual(p_chunk_name, p_adapter, recipe)
 
-	# 3. Configuração Física (HeightMapShape3D)
-	var hf_bytes = p_adapter.load_heightfield_bytes(p_chunk_name)
-	_setup_collision(hf_bytes, p_collision_uc)
+	# 3. Configuração Física Contínua (Trimesh ConcavePolygonShape3D)
+	_setup_collision()
 
 	return true
 
@@ -122,20 +122,18 @@ func _setup_visual(chunk_name: String, adapter: ChunkResourceAdapter, recipe: Di
 		visual_mesh.material_override = mat
 
 
-func _setup_collision(hf_bytes: PackedByteArray, collision_uc: BuildChunkCollisionUseCase) -> void:
-	if hf_bytes.is_empty() or not chunk_data:
+func _setup_collision() -> void:
+	if not visual_mesh or not visual_mesh.mesh:
 		return
 
-	var shape = collision_uc.from_raw_bytes(hf_bytes, chunk_data.grid_width, chunk_data.grid_depth)
+	# Cria colisão Trimesh contínua eliminando frestas físicas entre chunks
+	var shape = visual_mesh.mesh.create_trimesh_shape()
 	if not shape:
 		return
 
 	static_body = StaticBody3D.new()
 	collision_shape = CollisionShape3D.new()
 	collision_shape.shape = shape
-
-	# Ajusta a escala da colisão para coincidir com o tamanho de célula em metros
-	collision_shape.scale = Vector3(chunk_data.cell_size_x, 1.0, chunk_data.cell_size_z)
 
 	static_body.add_child(collision_shape)
 	add_child(static_body)

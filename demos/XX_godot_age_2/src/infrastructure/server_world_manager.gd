@@ -11,17 +11,17 @@
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends Node
 
-const ChunkResourceAdapter = preload("res://src/adapters/chunk_resource_adapter.gd")
-const LoadServerHeightfieldUseCase = preload("res://src/use_cases/load_server_heightfield_use_case.gd")
-const ValidatePlayerMovementUseCase = preload("res://src/use_cases/validate_player_movement_use_case.gd")
-const HeightfieldSampler = preload("res://src/domain/heightfield_sampler.gd")
+const ChunkResourceAdapter = preload("../adapters/chunk_resource_adapter.gd")
+const LoadServerHeightfieldUseCase = preload("../use_cases/load_server_heightfield_use_case.gd")
+const ValidatePlayerMovementUseCase = preload("../use_cases/validate_player_movement_use_case.gd")
+const HeightfieldSampler = preload("../domain/heightfield_sampler.gd")
 
 var _adapter: ChunkResourceAdapter
 var _load_hf_uc: LoadServerHeightfieldUseCase
 var _validate_move_uc: ValidatePlayerMovementUseCase
 
 # Dicionário de Samplers: { "16_24": HeightfieldSampler }
-var _samplers: Dictionary = {}
+var _samplers: Dictionary = { }
 
 
 func _init(p_maps_path: String = "res://assets/maps") -> void:
@@ -63,22 +63,32 @@ func find_sampler_at(world_x: float, world_z: float) -> HeightfieldSampler:
 		var half_w = s.total_width / 2.0
 		var half_d = s.total_depth / 2.0
 		if (
-			world_x >= (s.world_origin.x - half_w) and world_x <= (s.world_origin.x + half_w) and
-			world_z >= (s.world_origin.z - half_d) and world_z <= (s.world_origin.z + half_d)
+			world_x >= (s.world_origin.x - half_w) and world_x <= (s.world_origin.x + half_w)
+			and world_z >= (s.world_origin.z - half_d) and world_z <= (s.world_origin.z + half_d)
 		):
 			return s
 
-	# Se não encontrar no bounding box exato, retorna o primeiro disponível como fallback
-	if not _samplers.is_empty():
-		return _samplers.values()[0]
 	return null
+
+
+func get_chunk_name_at(world_x: float, world_z: float) -> String:
+	for c_name in _samplers:
+		var s: HeightfieldSampler = _samplers[c_name]
+		var half_w = s.total_width / 2.0
+		var half_d = s.total_depth / 2.0
+		if (
+			world_x >= (s.world_origin.x - half_w) and world_x <= (s.world_origin.x + half_w)
+			and world_z >= (s.world_origin.z - half_d) and world_z <= (s.world_origin.z + half_d)
+		):
+			return c_name
+	return ""
 
 
 func validate_player_move(
 	current_pos: Vector3,
 	requested_pos: Vector3,
 	delta_time: float,
-	max_speed: float = 30.0
+	max_speed: float = 30.0,
 ) -> Dictionary:
 	var sampler = find_sampler_at(requested_pos.x, requested_pos.z)
 	return _validate_move_uc.execute(current_pos, requested_pos, delta_time, max_speed, sampler)

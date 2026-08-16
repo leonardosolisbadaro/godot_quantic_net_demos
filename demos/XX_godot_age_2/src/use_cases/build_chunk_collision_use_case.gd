@@ -10,7 +10,7 @@
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 
-const TerrainChunkData = preload("res://src/domain/terrain_chunk_data.gd")
+const TerrainChunkData = preload("../domain/terrain_chunk_data.gd")
 
 
 func execute(height_data: PackedFloat32Array, width: int, depth: int) -> HeightMapShape3D:

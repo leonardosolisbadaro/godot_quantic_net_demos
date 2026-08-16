@@ -11,9 +11,9 @@
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends Node3D
 
-const ChunkResourceAdapter = preload("res://src/adapters/chunk_resource_adapter.gd")
-const BuildChunkCollisionUseCase = preload("res://src/use_cases/build_chunk_collision_use_case.gd")
-const L2TerrainChunkNode = preload("res://src/infrastructure/l2_terrain_chunk_node.gd")
+const ChunkResourceAdapter = preload("../adapters/chunk_resource_adapter.gd")
+const BuildChunkCollisionUseCase = preload("../use_cases/build_chunk_collision_use_case.gd")
+const L2TerrainChunkNode = preload("l2_terrain_chunk_node.gd")
 
 var _adapter: ChunkResourceAdapter
 var _collision_uc: BuildChunkCollisionUseCase

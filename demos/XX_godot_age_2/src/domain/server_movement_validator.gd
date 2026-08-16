@@ -10,7 +10,7 @@
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 
-const HeightfieldSampler = preload("res://src/domain/heightfield_sampler.gd")
+const HeightfieldSampler = preload("heightfield_sampler.gd")
 
 const MAX_SPEED_TOLERANCE_FACTOR := 1.25
 const MAX_VERTICAL_FLY_TOLERANCE := 2.5

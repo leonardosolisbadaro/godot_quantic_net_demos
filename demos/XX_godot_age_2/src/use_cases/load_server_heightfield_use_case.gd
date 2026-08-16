@@ -10,8 +10,8 @@
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 
-const ChunkResourceAdapter = preload("res://src/adapters/chunk_resource_adapter.gd")
-const HeightfieldSampler = preload("res://src/domain/heightfield_sampler.gd")
+const ChunkResourceAdapter = preload("../adapters/chunk_resource_adapter.gd")
+const HeightfieldSampler = preload("../domain/heightfield_sampler.gd")
 
 
 func execute(chunk_name: String, adapter: ChunkResourceAdapter) -> HeightfieldSampler:

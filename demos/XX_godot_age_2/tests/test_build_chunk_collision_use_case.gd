@@ -11,7 +11,7 @@
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends "res://addons/gut/test.gd"
 
-const BuildChunkCollisionUseCase = preload("res://src/use_cases/build_chunk_collision_use_case.gd")
+const BuildChunkCollisionUseCase = preload("../src/use_cases/build_chunk_collision_use_case.gd")
 
 var _use_case: BuildChunkCollisionUseCase
 
