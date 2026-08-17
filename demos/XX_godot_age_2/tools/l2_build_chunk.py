@@ -696,8 +696,8 @@ def build_terrain_mesh(heights: np.ndarray, scale: tuple, location: tuple, unit_
     zs = np.linspace(-half_d, half_d, rows, dtype=np.float32)
 
     grid_x, grid_z = np.meshgrid(xs, zs)
-    # Altitude em metros
-    world_y = (heights.astype(np.float32) - 32768.0) * (sy_scale / 128.0)
+    # Altitude em metros (Divisor 256.0 para relevo suave e montanhas onduladas)
+    world_y = (heights.astype(np.float32) - 32768.0) * (sy_scale / 256.0)
 
     # Normais de superfície
     dz, dx = np.gradient(world_y, sz_world, sx)

@@ -23,8 +23,8 @@ const SECRET := "secret"
 const CLUSTER := ["16_24", "16_25", "17_24", "17_25"]
 
 # Ponto de Spawn suave na junção dos 4 chunks de Talking Island (estrada da falésia)
-const SPAWN_X := -14972.0
-const SPAWN_Z := 34959.0
+const SPAWN_X := -14979.0
+const SPAWN_Z := 34952.0
 
 var _is_server: bool = false
 var _server_world: ServerWorldManager
@@ -78,6 +78,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					vp.debug_draw = Viewport.DEBUG_DRAW_DISABLED
 					print("[DEBUG] Viewport Debug: DESATIVADO")
+		elif event.keycode == KEY_F3:
+			if _debug_hud:
+				_debug_hud.toggle_visibility()
+				print("[DEBUG] HUD Visibilidade: ", "LIGADA" if _debug_hud.visible else "OCULTA")
 
 
 func _notification(what: int) -> void:
@@ -135,10 +139,13 @@ func _start_client() -> void:
 	_local_player.name = "LocalPlayer"
 	_local_player.is_local = true
 	_local_player.safe_spawn_position = Vector3(SPAWN_X, ground_y, SPAWN_Z)
-	_local_player.min_fall_limit_y = min_world_y - 50.0  # 50m abaixo do ponto mais profundo do cluster
+	_local_player.min_fall_limit_y = min_world_y - 50.0 # 50m abaixo do ponto mais profundo do cluster
 	_local_player.position = Vector3(SPAWN_X, ground_y, SPAWN_Z)
 	add_child(_local_player)
-	print("[CLIENT] Avatar instanciado perfeitamente rente ao solo na altitude: %.2fm (Gatilho Anti-Limbo: %.2fm)" % [ground_y, _local_player.min_fall_limit_y])
+	print(
+		"[CLIENT] Avatar instanciado perfeitamente rente ao solo na altitude: %.2fm (Gatilho Anti-Limbo: %.2fm)"
+		% [ground_y, _local_player.min_fall_limit_y]
+	)
 
 	# 4. Instancia a HUD de Depuração de Coordenadas
 	_debug_hud = DebugHUD.new()
