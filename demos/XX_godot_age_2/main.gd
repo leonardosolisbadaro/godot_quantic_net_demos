@@ -23,8 +23,8 @@ const SECRET := "secret"
 const CLUSTER := ["16_24", "16_25", "17_24", "17_25"]
 
 # Ponto de Spawn suave na junção dos 4 chunks de Talking Island (estrada da falésia)
-const SPAWN_X := -14979.0
-const SPAWN_Z := 34952.0
+const SPAWN_X := -3744.0
+const SPAWN_Z := 8738.0
 
 var _is_server: bool = false
 var _server_world: ServerWorldManager

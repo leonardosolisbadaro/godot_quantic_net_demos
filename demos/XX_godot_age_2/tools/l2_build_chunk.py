@@ -32,7 +32,7 @@ if sys.platform == "win32":
 
 UE2_PACKAGE_TAG = 0x9E2A83C1
 L2_BLOWFISH_KEY = b"lineage2"
-UU_TO_METERS_DEFAULT = 1.0 / 6.5625  # 1 UU ≈ 0.152381 metros (Escala 4x Continental: 4993.2m por chunk)
+UU_TO_METERS_DEFAULT = 0.04  # 1 UU = 4.0 cm = 0.04 metros (Canônico 1:1 RE / Protocolo 746: 1310.72m por chunk)
 
 
 # ==============================================================================
@@ -688,6 +688,7 @@ def build_terrain_mesh(heights: np.ndarray, scale: tuple, location: tuple, unit_
     sx = float(scale[0]) * step * unit_scale
     sz_world = float(scale[1]) * step * unit_scale  # Em Godot, Z é profundidade horizontal
     sy_scale = float(scale[2]) * unit_scale        # Em Godot, Y é altitude
+    loc_z = float(location[2]) * unit_scale if len(location) > 2 else 0.0
 
     # Centraliza a malha em torno da origem local do chunk sem frestas de fronteira
     half_w = (cols * sx) / 2.0
@@ -696,11 +697,14 @@ def build_terrain_mesh(heights: np.ndarray, scale: tuple, location: tuple, unit_
     zs = np.linspace(-half_d, half_d, rows, dtype=np.float32)
 
     grid_x, grid_z = np.meshgrid(xs, zs)
-    # Altitude em metros (Divisor 256.0 para relevo suave e montanhas onduladas)
-    world_y = (heights.astype(np.float32) - 32768.0) * (sy_scale / 256.0)
 
-    # Normais de superfície
-    dz, dx = np.gradient(world_y, sz_world, sx)
+    # Altitude em metros (Fórmula Canônica Validada contra Geodata Oficial .l2d com divisor 256.0)
+    world_y = ((heights.astype(np.float32) - 32768.0) * (sy_scale / 256.0)) + loc_z
+
+    # Normais de superfície calculadas com o espaçamento efetivo entre vértices
+    dx_eff = (2.0 * half_w) / max(1, cols - 1)
+    dz_eff = (2.0 * half_d) / max(1, rows - 1)
+    dz, dx = np.gradient(world_y, dz_eff, dx_eff)
     nx = -dx
     ny = np.ones_like(world_y)
     nz = -dz
@@ -931,6 +935,9 @@ class L2ChunkCompiler:
             west_wy = np.fromfile(west_bin, dtype="<f4").reshape((256, 256)).copy()
             avg = (wy[:, 0] + west_wy[:, 255]) / 2.0
             wy[:, 0] = avg
+            west_wy[:, 255] = avg
+            with open(west_bin, "wb") as f:
+                f.write(west_wy.tobytes())
         # Converte de volta para matriz de inteiros de altura G16
         welded_heights = np.clip(32768.0 + (wy / scale_factor), 0, 65535).astype(np.uint16)
         return welded_heights
